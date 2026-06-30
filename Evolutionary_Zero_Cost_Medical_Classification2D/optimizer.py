@@ -83,6 +83,8 @@ class Optimizer:
         # Load the population from checkpoint if resuming training
         if self.resume_train:
             self._load_population()
+        else:
+            self.pop=Population(self.blocks_size,self.population_size,self.layers) #self.pop used to load the population if resume training and did nothing if we dont want to resume so it never intialiased a population 
 
     def _load_population(self):
         """

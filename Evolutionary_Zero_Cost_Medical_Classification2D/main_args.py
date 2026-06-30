@@ -14,9 +14,9 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchsummary import summary
 import utils
 import time
-from ga import GA
-from mo_ga import MOGA
-from mo_gad import MOGADE
+#from ga import GA
+#from mo_ga import MOGA
+#from mo_gad import MOGADE
 from so_ga import SOGA
 
 parser = argparse.ArgumentParser("cifar")
@@ -104,7 +104,7 @@ if __name__ == '__main__':
   #ga.evolve()
   ga = SOGA(population_size,number_of_generations,crossover_prob,mutation_prob,blocks_size,num_classes,in_channels,epochs,batch_size,layers,n_channels,dropout_rate,retrain,resume_train,cutout,multigpu_num,medmnist_dataset,is_medmnist,check_power_consumption,evaluation_type)
   #Running the algorithm
-  #ga.mealypy_evolve('de',20,20,medmnist_dataset)
+  #ga.mealypy_evolve('de',10,2,medmnist_dataset)
 
 
 
@@ -112,7 +112,13 @@ if __name__ == '__main__':
   start_time = time.time()
 
   # Running the algorithm
-  ga.mealypy_evolve('de',15,10,medmnist_dataset)
+  #ga.mealypy_evolve('de',10,2,medmnist_dataset) -> old call
+  ga.nsga2_evolve(
+    pop_size=10,
+    n_gen=2,
+    seed=1,
+    proxy_name="synflow"
+) #for smoke test pop size=10 n_gen=2,real run =20,10
   # Record the end time
   end_time = time.time()
 

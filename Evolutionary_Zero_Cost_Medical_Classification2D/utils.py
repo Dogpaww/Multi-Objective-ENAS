@@ -264,7 +264,8 @@ def drop_path_fp16(x, drop_prob):
     x = x.half()
     if drop_prob > 0.:
         keep_prob = 1. - drop_prob
-        mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob)).half()
+        mask = x.new_empty(x.size(0), 1, 1, 1).bernoulli_(keep_prob)
+        #mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob)).half() -old code only applicable in CUDA
         x.div_(keep_prob)
         x.mul_(mask)
     return x
@@ -273,7 +274,8 @@ def drop_path_fp16(x, drop_prob):
 def drop_path(x, drop_prob):
     if drop_prob > 0.:
         keep_prob = 1. - drop_prob
-        mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob))
+        mask = x.new_empty(x.size(0), 1, 1, 1).bernoulli_(keep_prob)
+        #mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob))
         x.div_(keep_prob)
         x.mul_(mask)
     return x

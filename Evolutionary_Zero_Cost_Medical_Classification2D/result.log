@@ -1733,3 +1733,6 @@
 2025/02/12 12:49:34 AM, INFO, mealpy.evolutionary_based.DE.BaseDE: >Problem: P, Epoch: 2, Current best: 1.048857179510146e+20, Global best: 1.048857179510146e+20, Runtime: 39.52209 seconds
 2025/02/12 12:50:16 AM, INFO, mealpy.evolutionary_based.DE.BaseDE: >Problem: P, Epoch: 3, Current best: 3.2691008068405376e+22, Global best: 3.2691008068405376e+22, Runtime: 41.62972 seconds
 2025/02/12 12:50:54 AM, INFO, mealpy.evolutionary_based.DE.BaseDE: >Problem: P, Epoch: 4, Current best: 3.2691008068405376e+22, Global best: 3.2691008068405376e+22, Runtime: 38.15704 seconds
+2026/06/27 06:03:49 PM, INFO, mealpy.evolutionary_based.DE.BaseDE: Solving single objective optimization problem.
+2026/06/27 06:04:45 PM, INFO, mealpy.evolutionary_based.DE.BaseDE: >Problem: P, Epoch: 1, Current best: 3525216630469409.5, Global best: 3525216630469409.5, Runtime: 26.66182 seconds
+2026/06/27 06:05:15 PM, INFO, mealpy.evolutionary_based.DE.BaseDE: >Problem: P, Epoch: 2, Current best: 3525216630469409.5, Global best: 3525216630469409.5, Runtime: 30.64548 seconds

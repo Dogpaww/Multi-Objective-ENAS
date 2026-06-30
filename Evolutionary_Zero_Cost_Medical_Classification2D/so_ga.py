@@ -52,13 +52,303 @@ from pymoo.operators.mutation.pm import PolynomialMutation
 from pymoo.operators.repair.rounding import RoundingRepair
 from pymoo.algorithms.moo.nsga2 import NSGA2
 
+from pymoo.core.problem import ElementwiseProblem #added imports
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting #added imports
 
 def evaluate_arch(self, ind, dataset, measure):
 
     return random.randint(10,10)
 
+class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is one candidate arch vector,out["f"]=two obj vector 
+    def __init__(self, soga, n_var=48, proxy_name="synflow"):
+        super().__init__(
+            n_var=n_var,
+            n_obj=2,
+            n_ieq_constr=0,
+            xl=np.zeros(n_var),
+            xu=np.ones(n_var) * 0.99,
+        )
+        self.soga = soga
+        self.proxy_name = proxy_name
 
-class SOGA(Optimizer):
+    def _evaluate(self, x, out, *args, **kwargs):
+        try:
+            record = self.soga.evaluate_architecture_metrics(
+                x,
+                proxy_name=self.proxy_name
+            )
+
+            # pymoo minimizes all objectives.
+            # Objective 1: maximize proxy score -> minimize negative log proxy.
+            # Objective 2: minimize FLOPs.
+            proxy_obj = -record["log_proxy_score"]
+            flops_obj = record["flops_billion"]
+
+            out["F"] = np.array([proxy_obj, flops_obj], dtype=float)
+
+        except Exception as e:
+            record = {
+                "solution": [float(v) for v in x],
+                "error": repr(e),
+                "proxy_score": 0.0,
+                "log_proxy_score": -300.0,
+                "flops": float("inf"),
+                "flops_billion": float("inf"),
+            }
+
+            # Bad architecture gets punished.
+            out["F"] = np.array([1e9, 1e9], dtype=float)
+
+        self.soga.nsga2_archive.append(record)
+
+
+class SOGA(Optimizer): 
+
+    def build_model_from_solution(self, solution):
+        info = INFO[self.medmnist_dataset]
+        n_classes = len(info['label'])
+
+        solution = np.asarray(solution, dtype=float)
+        solution = np.clip(solution, 0.0, 0.99)
+
+        individual = []
+
+        for i in range(32):
+            if i % 2 == 0:
+                individual.append(float(solution[i]))
+            else:
+                individual.append(int(random.choice(self.pop.params_choices[str(i)])))
+                individual.append(int(math.floor(solution[i] * len(self.attentions))))
+
+        num_layers = int(math.floor(2 + ((self.layers - 2) * solution[-1])))
+        num_layers = max(2, min(int(self.layers), num_layers))
+        individual.append(num_layers)
+
+        decoded_cell = decode_cell(
+            decode_operations(individual[:-1], self.pop.indexes)
+        )
+
+        is_final = False
+
+        decoded_model = NetworkCIFAR(
+            self.n_channels,
+            n_classes,
+            individual[-1],
+            True,
+            decoded_cell,
+            self.is_medmnist,
+            is_final,
+            self.dropout_rate,
+            'FP32',
+            False
+        )
+
+        return individual, decoded_cell, decoded_model, n_classes
+
+
+    def evaluate_architecture_metrics(self, solution, proxy_name="synflow"):
+        individual, decoded_cell, decoded_model, n_classes = self.build_model_from_solution(solution)
+
+        measures = self.evaluator.evaluate_zero_cost(
+            decoded_model,
+            self.epochs,
+            n_classes
+        )
+
+        proxy_score = float(measures[proxy_name])
+        flops = float(measures["flops"])
+        params = float(measures.get("params", 0.0))
+        macs = float(measures.get("macs", 0.0))
+        sizemb = float(measures.get("sizemb", 0.0))
+        latency = float(measures.get("latency", measures.get("Latency", 0.0)))
+
+        safe_proxy = max(proxy_score, 1e-300)
+
+        record = {
+            "solution": [float(v) for v in solution],
+            "individual": [
+                float(v) if isinstance(v, (float, np.floating)) else int(v)
+                for v in individual
+            ],
+            "decoded_cell": repr(decoded_cell),
+            "proxy_name": proxy_name,
+            "proxy_score": proxy_score,
+            "log_proxy_score": float(math.log10(safe_proxy)),
+            "flops": flops,
+            "flops_billion": flops / 1e9,
+            "params": params,
+            "params_million": params / 1e6,
+            "macs": macs,
+            "macs_billion": macs / 1e9,
+            "sizemb": sizemb,
+            "latency": latency,
+        }
+
+        self.last_eval_record = record
+        return record
+    
+    def select_nsga2_architectures(self, records): #added function
+        valid = []
+
+        for r in records:
+            if "error" in r:
+                continue
+            if not np.isfinite(r["proxy_score"]):
+                continue
+            if not np.isfinite(r["flops"]):
+                continue
+            valid.append(r)
+
+        if len(valid) == 0:
+            raise RuntimeError("No valid architectures were evaluated by NSGA-II.")
+
+        # Remove duplicate decoded cells; keep the one with higher proxy.
+        dedup = {}
+        for r in valid:
+            key = r["decoded_cell"]
+            if key not in dedup:
+                dedup[key] = r
+            elif r["proxy_score"] > dedup[key]["proxy_score"]:
+                dedup[key] = r
+
+        valid = list(dedup.values())
+
+        # Build minimization objective matrix:
+        # f1 = -log_proxy_score, lower is better
+        # f2 = flops_billion, lower is better
+        F = np.array([
+            [-r["log_proxy_score"], r["flops_billion"]]
+            for r in valid
+        ], dtype=float)
+
+        pareto_indices = NonDominatedSorting().do(
+            F,
+            only_non_dominated_front=True
+        )
+
+        pareto = [valid[i] for i in pareto_indices]
+
+        # 1. Best architecture by zero-cost proxy only.
+        best_proxy = max(valid, key=lambda r: r["proxy_score"])
+
+        # 2. Best architecture by FLOPs only.
+        best_flops = min(valid, key=lambda r: r["flops"])
+
+        # 3 and 4. Balanced choices from Pareto front.
+        log_proxy_values = np.array([r["log_proxy_score"] for r in pareto], dtype=float)
+        flops_values = np.array([r["flops"] for r in pareto], dtype=float)
+
+        eps = 1e-12
+
+        proxy_min = log_proxy_values.min()
+        proxy_max = log_proxy_values.max()
+
+        flops_min = flops_values.min()
+        flops_max = flops_values.max()
+
+        for r in pareto:
+            # Higher proxy is better.
+            proxy_norm = (r["log_proxy_score"] - proxy_min) / (proxy_max - proxy_min + eps)
+
+            # Lower FLOPs is better, so invert.
+            flops_norm = (flops_max - r["flops"]) / (flops_max - flops_min + eps)
+
+            r["proxy_norm"] = float(proxy_norm)
+            r["flops_norm"] = float(flops_norm)
+
+            # Ideal point is proxy_norm=1 and flops_norm=1.
+            r["balanced_distance"] = float(
+                math.sqrt((1.0 - proxy_norm) ** 2 + (1.0 - flops_norm) ** 2)
+            )
+
+            r["balanced_score"] = float(0.5 * proxy_norm + 0.5 * flops_norm)
+
+        excluded = {
+            best_proxy["decoded_cell"],
+            best_flops["decoded_cell"],
+        }
+
+        balanced_pool = [
+            r for r in sorted(pareto, key=lambda r: r["balanced_distance"])
+            if r["decoded_cell"] not in excluded
+        ]
+
+        if len(balanced_pool) >= 2:
+            best_balanced = balanced_pool[:2]
+        else:
+            best_balanced = sorted(pareto, key=lambda r: r["balanced_distance"])[:2]
+
+        selected = {
+            "best_proxy_architecture": best_proxy,
+            "best_flops_architecture": best_flops,
+            "best_balanced_architectures": best_balanced,
+            "pareto_front": pareto,
+            "all_valid_architectures": valid,
+        }
+
+        with open("nsga2_selected_architectures.json", "w") as f:
+            json.dump(selected, f, indent=2)
+
+        print("\n================ NSGA-II SELECTED ARCHITECTURES ================")
+
+        def show(name, r):
+            print(f"\n{name}")
+            print(f"proxy_name: {r['proxy_name']}")
+            print(f"proxy_score: {r['proxy_score']}")
+            print(f"log_proxy_score: {r['log_proxy_score']}")
+            print(f"FLOPs: {r['flops_billion']:.6f} B")
+            print(f"params: {r['params_million']:.6f} M")
+            print(f"MACs: {r['macs_billion']:.6f} B")
+            print(f"latency: {r['latency']:.4f} ms")
+            print(f"balanced_distance: {r.get('balanced_distance', None)}")
+            print(f"individual: {r['individual']}")
+            print(f"decoded_cell: {r['decoded_cell']}")
+
+        show("BEST PURE PROXY", best_proxy)
+        show("BEST PURE FLOPs", best_flops)
+
+        for i, r in enumerate(best_balanced, start=1):
+            show(f"BEST BALANCED #{i}", r)
+
+        print("\nSaved selected architectures to nsga2_selected_architectures.json")
+
+        return selected
+    
+    def nsga2_evolve(self, pop_size=10, n_gen=2, seed=1, proxy_name="synflow"): #old evolve algorithm is kept for backwards compatibility not removed yet
+        self.nsga2_archive = []
+
+        n_var = 48
+
+        problem = NASNSGA2Problem(
+            soga=self,
+            n_var=n_var,
+            proxy_name=proxy_name
+        )
+
+        algorithm = NSGA2(
+            pop_size=pop_size,
+            sampling=FloatRandomSampling(),
+            crossover=TwoPointCrossover(prob=0.9),
+            mutation=PolynomialMutation(prob=1.0 / n_var),
+            eliminate_duplicates=True
+        )
+
+        results = minimize(
+            problem=problem,
+            algorithm=algorithm,
+            termination=("n_gen", n_gen),
+            seed=seed,
+            save_history=True,
+            verbose=True
+        )
+
+        print("\nNSGA-II Pareto objective values:")
+        print(results.F)
+
+        selected = self.select_nsga2_architectures(self.nsga2_archive)
+
+        return selected
+    
     def __init__(self, population_size, number_of_generations, crossover_prob, mutation_prob, blocks_size, num_classes,
                  in_channels, epochs, batch_size, layers, n_channels, dropout_rate, retrain, resume_train, cutout,
                  multigpu_num,medmnist_dataset,is_medmnist,check_power_consumption=False,evaluation_type='zero_cost'):
@@ -66,7 +356,8 @@ class SOGA(Optimizer):
                          num_classes, in_channels, epochs, batch_size, layers, n_channels, dropout_rate, retrain,
                          resume_train, cutout, multigpu_num,medmnist_dataset,is_medmnist,check_power_consumption,evaluation_type)
 
-    def evaluate_fitness_single_mealpy(self, solution):
+    
+    """def evaluate_fitness_single_mealpy(self, solution):
         info = INFO[self.medmnist_dataset]
         task = info['task']
         n_channels = 3
@@ -95,7 +386,13 @@ class SOGA(Optimizer):
         #                                     self.dropout_rate, 'FP32', False)
 
         loss = self.evaluator.evaluate_zero_cost(decoded_individual, self.epochs,n_classes)
-        return  loss['synflow']
+        return  loss['synflow']-old function"""
+    
+    def evaluate_fitness_single_mealpy(self, solution):
+        record = self.evaluate_architecture_metrics(solution, proxy_name="synflow")
+        return record["proxy_score"]
+    
+
     def evaluate_ensemble_predictions(self,ensemble,medmnist_dataset):
 
         return None
@@ -199,7 +496,7 @@ class SOGA(Optimizer):
 
             # Display the chart
             plt.show()
-            #self.train_final_individual(best_position,medmnist_dataset)
+            ## self.train_final_individual(best_position,medmnist_dataset)
         elif algorithm == 'lshade':
             #Trying to create an ensemble of 5 top find networks to improve the perforamnce
             ensemble_models = []
@@ -210,7 +507,7 @@ class SOGA(Optimizer):
                 best_position, best_fitness = model.solve(problem=problem_multi)
                 print(f"Solution: {best_position}, Fitness: {best_fitness}")
                 ensemble_models.append(best_position)
-                #self.train_final_individual(best_position, medmnist_dataset)
+                ## self.train_final_individual(best_position, medmnist_dataset)
             self.evaluate_ensemble_predictions(ensemble_models,medmnist_dataset)
             print(ensemble_models)
             print("Now ensemble predictions from test test")

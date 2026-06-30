@@ -100,7 +100,7 @@ class Evaluate:
         # Assume this function trains a model and returns a fitness score
         # You need to replace 'your_data' with your actual data
         # your_data_transformed = composed_transform(your_data)
-        fitn = self.train(composed_transform,model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, 100, gpu_ids,
+        fitn = self.train(composed_transform,model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, num_epochs, gpu_ids,
           batch_size,is_final, download, run)
         return fitn,data_augmentations
 
@@ -272,8 +272,10 @@ class Evaluate:
             input_tensor = torch.randn(4, 3, 256, 256)  # Replace with your input size
 
 
-        input_tensor = input_tensor.cuda()
-        model = model.cuda()
+        #input_tensor = input_tensor.cuda() - works only for cuda
+        input_tensor = input_tensor.to(device)
+        #model = model.cuda()
+        model = model.to(device)
         if self.check_power_consumption == True:
             # Run a few warm-up iterations
             for _ in range(5):
@@ -281,7 +283,8 @@ class Evaluate:
                     _ = model(input_tensor)
 
             # Measure the time and profile the inference
-            with profiler.profile(use_cuda=True) as prof:
+            #with profiler.profile(use_cuda=True) as prof: -old code only works with cuda
+            with profiler.profile(use_cuda=torch.cuda.is_available()) as prof:
                 for _ in range(100):  # Adjust the number of iterations as needed
                     with torch.no_grad():
                         output = model(input_tensor)
@@ -318,6 +321,10 @@ class Evaluate:
         measures['macs'] = macs
         measures['flops'] = flops
         measures['params'] = params
+        measures['latency']=latency #added line
+
+        measures['proxy_name'] = 'synflow' #added line
+        measures['proxy_score'] = float(measures['synflow']) #added line
 
 
         return measures
@@ -589,8 +596,9 @@ class Evaluate:
 
         train_log = 'train  auc: %.5f  acc: %.5f\n   f1: %.5f\n' % (
             train_metrics[1], train_metrics[2], train_metrics[3])
-        val_log = 'val  auc: %.5f  acc: %.5f\n   f1: %.5f\n' % (val_metrics[1], val_metrics[2], train_metrics[3])
-        test_log = 'test  auc: %.5f  acc: %.5f\n   f1: %.5f\n' % (test_metrics[1], test_metrics[2], train_metrics[3])
+        val_log = 'val  auc: %.5f  acc: %.5f\n   f1: %.5f\n' % (val_metrics[1], val_metrics[2], val_metrics[3]) #old code showed the train metric for the last one instead of val
+        #test_log = 'test  auc: %.5f  acc: %.5f\n   f1: %.5f\n' % (test_metrics[1], test_metrics[2], train_metrics[3])-old code output the train metric instead of test
+        test_log = 'test  auc: %.5f  acc: %.5f\n   f1: %.5f\n' % (test_metrics[1], test_metrics[2], test_metrics[3])
 
         log = '%s\n' % (data_flag) + train_log + val_log + test_log
         print(log)
@@ -716,7 +724,7 @@ class Evaluate:
 
         optimizer = torch.optim.Adam(model.parameters(), lr=lr,weight_decay=3e-4)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,milestones=milestones,gamma=gamma)
+        #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,milestones=milestones,gamma=gamma)
 
         logs = ['loss', 'auc', 'acc']
         train_logs = ['train_' + log for log in logs]

@@ -1,0 +1,359 @@
+The ``converters`` are currently experimental. It may not support operations including (but not limited to) Functions in ``torch.nn.functional`` that involved data dimension
+
+Compiled modules for significant speedup can not be used!
+https://pymoo.org/installation.html#installation
+
+To disable this warning:
+from pymoo.config import Config
+Config.warnings['not_compiled'] = False
+
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+FLOPs: 0.10317568 billion
+Parameters: 0.178598 million
+Latency: 41.88 ms
+MACs: 0.05158784 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+FLOPs: 0.144289088 billion
+Parameters: 0.250932 million
+Latency: 37.47 ms
+MACs: 0.072144544 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+FLOPs: 0.16261088 billion
+Parameters: 0.3412 million
+Latency: 27.14 ms
+MACs: 0.08130544 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+FLOPs: 0.082807744 billion
+Parameters: 0.128752 million
+Latency: 35.98 ms
+MACs: 0.041403872 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+FLOPs: 0.221686832 billion
+Parameters: 0.374401 million
+Latency: 57.53 ms
+MACs: 0.110843416 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+FLOPs: 0.281432144 billion
+Parameters: 0.545857 million
+Latency: 70.95 ms
+MACs: 0.140716072 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+FLOPs: 0.12929856 billion
+Parameters: 0.233042 million
+Latency: 27.85 ms
+MACs: 0.06464928 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+FLOPs: 0.173943088 billion
+Parameters: 0.208135 million
+Latency: 44.22 ms
+MACs: 0.086971544 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+FLOPs: 0.237956896 billion
+Parameters: 0.497795 million
+Latency: 70.54 ms
+MACs: 0.118978448 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+FLOPs: 0.235146496 billion
+Parameters: 0.470562 million
+Latency: 36.36 ms
+MACs: 0.117573248 billion
+==========================================================
+n_gen  |  n_eval  | n_nds  |      eps      |   indicator  
+==========================================================
+     1 |       10 |      4 |             - |             -
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+FLOPs: 0.110448608 billion
+Parameters: 0.199914 million
+Latency: 34.96 ms
+MACs: 0.055224304 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+FLOPs: 0.12929856 billion
+Parameters: 0.233042 million
+Latency: 27.72 ms
+MACs: 0.06464928 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+FLOPs: 0.199335344 billion
+Parameters: 0.323627 million
+Latency: 62.98 ms
+MACs: 0.099667672 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+FLOPs: 0.153183504 billion
+Parameters: 0.136973 million
+Latency: 37.40 ms
+MACs: 0.076591752 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+FLOPs: 0.238006048 billion
+Parameters: 0.497795 million
+Latency: 46.11 ms
+MACs: 0.119003024 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+FLOPs: 0.164904544 billion
+Parameters: 0.350982 million
+Latency: 29.45 ms
+MACs: 0.082452272 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+FLOPs: 0.096570304 billion
+Parameters: 0.128752 million
+Latency: 40.70 ms
+MACs: 0.048285152 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+FLOPs: 0.324936448 billion
+Parameters: 0.594268 million
+Latency: 52.24 ms
+MACs: 0.162468224 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+FLOPs: 0.144289088 billion
+Parameters: 0.250932 million
+Latency: 37.87 ms
+MACs: 0.072144544 billion
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_avgpool() for <class 'torch.nn.modules.pooling.AvgPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm1d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+FLOPs: 0.211246064 billion
+Parameters: 0.432361 million
+Latency: 50.91 ms
+MACs: 0.105623032 billion
+     2 |       20 |      5 |  0.0735654551 |             f
+
+NSGA-II Pareto objective values:
+[[ -9.41066099   0.10317568]
+ [ -7.00593442   0.08280774]
+ [-15.75014807   0.22168683]
+ [-12.89328615   0.19933534]
+ [ -9.50467924   0.14428909]]
+
+================ NSGA-II SELECTED ARCHITECTURES ================
+
+BEST PURE PROXY
+proxy_name: synflow
+proxy_score: 5625330825631770.0
+log_proxy_score: 15.750148068387219
+FLOPs: 0.221687 B
+params: 0.374401 M
+MACs: 0.110843 B
+latency: 57.5349 ms
+balanced_distance: 1.0
+individual: [0.7277153036557827, 0, 4, 0.8987376939784888, 0, 5, 0.013812057245841045, 0, 1, 0.610610573431641, 1, 5, 0.9406743580546089, 1, 3, 0.9064502862686118, 1, 3, 0.3861076369998338, 0, 2, 0.5982673780907735, 3, 3, 0.9169196124393891, 0, 5, 0.3909268567943193, 0, 5, 0.17221611001365972, 1, 0, 0.13372836646626401, 0, 3, 0.021309557221456, 0, 5, 0.8188443164590251, 2, 0, 0.1744342930193047, 1, 1, 0.1296868763628077, 0, 4, 5]
+decoded_cell: Genotype(normal=[('octave_conv_5x5', 0, 'GE_theta-plus'), ('mbconv_k5_t1', 0, 'DoubleAttention'), ('max_pool_3x3', 0, 'SE'), ('inv_res_5x5', 1, 'DoubleAttention'), ('mbconv_k3_t1', 1, 'CBAM'), ('mbconv_k5_t1', 1, 'CBAM'), ('dil_conv_5x5', 0, 'BAM'), ('inv_res_5x5', 3, 'CBAM')], normal_concat=[2, 3, 4, 5], reduce=[('mbconv_k5_t1', 0, 'DoubleAttention'), ('dil_conv_5x5', 0, 'DoubleAttention'), ('skip_connect', 1, 'Identity'), ('skip_connect', 0, 'CBAM'), ('max_pool_3x3', 0, 'DoubleAttention'), ('mbconv_k7_t1', 2, 'Identity'), ('skip_connect', 1, 'SE'), ('skip_connect', 0, 'GE_theta-plus')], reduce_concat=[2, 3, 4, 5], normal_bottleneck='', reduce_bottleneck='')
+
+BEST PURE FLOPs
+proxy_name: synflow
+proxy_score: 10137582.825170722
+log_proxy_score: 7.005934415467564
+FLOPs: 0.082808 B
+params: 0.128752 M
+MACs: 0.041404 B
+latency: 35.9759 ms
+balanced_distance: 1.0
+individual: [0.04410635975931411, 0, 0, 0.22345224522177615, 0, 4, 0.554119812233601, 1, 0, 0.07125453689259191, 1, 5, 0.5624194573007427, 2, 1, 0.2498024871246202, 0, 4, 0.1934751862982256, 3, 3, 0.9603197891974292, 1, 5, 0.2374492815561103, 0, 2, 0.6137561611975659, 0, 4, 0.15522348069962344, 0, 0, 0.0693219222820301, 1, 2, 0.600266167036797, 2, 3, 0.31418878522893917, 2, 5, 0.5739477670533389, 2, 2, 0.5454387369267178, 0, 4, 2]
+decoded_cell: Genotype(normal=[('max_pool_3x3', 0, 'Identity'), ('sep_conv_3x3', 0, 'GE_theta-plus'), ('inv_res_3x3', 1, 'Identity'), ('avg_pool_3x3', 1, 'DoubleAttention'), ('inv_res_3x3', 2, 'SE'), ('sep_conv_3x3', 0, 'GE_theta-plus'), ('sep_conv_3x3', 3, 'CBAM'), ('mbconv_k3_t1', 1, 'DoubleAttention')], normal_concat=[2, 3, 4, 5], reduce=[('sep_conv_3x3', 0, 'BAM'), ('inv_res_5x5', 0, 'GE_theta-plus'), ('skip_connect', 0, 'Identity'), ('avg_pool_3x3', 1, 'BAM'), ('inv_res_5x5', 2, 'CBAM'), ('dil_conv_3x3', 2, 'DoubleAttention'), ('inv_res_5x5', 2, 'BAM'), ('inv_res_3x3', 0, 'GE_theta-plus')], reduce_concat=[2, 3, 4, 5], normal_bottleneck='', reduce_bottleneck='')
+
+BEST BALANCED #1
+proxy_name: synflow
+proxy_score: 2574310874.203205
+log_proxy_score: 9.410660991208118
+FLOPs: 0.103176 B
+params: 0.178598 M
+MACs: 0.051588 B
+latency: 41.8820 ms
+balanced_distance: 0.7396774697329335
+individual: [0.4128517846555483, 0, 4, 0.00011323106917143777, 0, 1, 0.14528833190894191, 1, 0, 0.1843976092638942, 0, 2, 0.39279979948836324, 1, 3, 0.4150025692592619, 1, 4, 0.20240772723420225, 3, 5, 0.027113717265946902, 3, 3, 0.41313175434345567, 0, 3, 0.13898306920928144, 0, 1, 0.7927371229887813, 1, 5, 0.3102899363776504, 0, 4, 0.8676252607730779, 1, 5, 0.08419376925608013, 1, 0, 0.16813211536892322, 0, 5, 0.09736336549471959, 3, 2, 3]
+decoded_cell: Genotype(normal=[('dil_conv_5x5', 0, 'GE_theta-plus'), ('max_pool_3x3', 0, 'SE'), ('skip_connect', 1, 'Identity'), ('skip_connect', 0, 'BAM'), ('dil_conv_5x5', 1, 'CBAM'), ('dil_conv_5x5', 1, 'GE_theta-plus'), ('sep_conv_3x3', 3, 'DoubleAttention'), ('max_pool_3x3', 3, 'CBAM')], normal_concat=[2, 3, 4, 5], reduce=[('dil_conv_5x5', 0, 'CBAM'), ('skip_connect', 0, 'SE'), ('octave_conv_3x3', 1, 'DoubleAttention'), ('sep_conv_5x5', 0, 'GE_theta-plus'), ('mbconv_k7_t1', 1, 'DoubleAttention'), ('avg_pool_3x3', 1, 'Identity'), ('skip_connect', 0, 'DoubleAttention'), ('avg_pool_3x3', 3, 'BAM')], reduce_concat=[2, 3, 4, 5], normal_bottleneck='', reduce_bottleneck='')
+
+BEST BALANCED #2
+proxy_name: synflow
+proxy_score: 3196533339.500621
+log_proxy_score: 9.50467923843847
+FLOPs: 0.144289 B
+params: 0.250932 M
+MACs: 0.072145 B
+latency: 37.8671 ms
+balanced_distance: 0.8403092348783072
+individual: [0.28489758520048525, 0, 0, 0.019173288291594103, 0, 4, 0.20951183484005845, 1, 1, 0.4866574276875349, 1, 0, 0.568376429437093, 1, 0, 0.5834124815342514, 0, 4, 0.10131108453954758, 1, 2, 0.6874561561504676, 2, 2, 0.04945392435662629, 0, 3, 0.657156698767591, 0, 3, 0.9351488084309052, 0, 3, 0.8943678961350047, 1, 0, 0.13788358377825097, 2, 4, 0.39370006861567824, 2, 0, 0.9182334945920736, 2, 2, 0.743303982104794, 3, 4, 3]
+decoded_cell: Genotype(normal=[('sep_conv_5x5', 0, 'Identity'), ('max_pool_3x3', 0, 'GE_theta-plus'), ('sep_conv_3x3', 1, 'SE'), ('conv_7x1_1x7', 1, 'Identity'), ('inv_res_5x5', 1, 'Identity'), ('inv_res_5x5', 0, 'GE_theta-plus'), ('avg_pool_3x3', 1, 'BAM'), ('blur_pool_3x3', 2, 'BAM')], normal_concat=[2, 3, 4, 5], reduce=[('max_pool_3x3', 0, 'CBAM'), ('blur_pool_3x3', 0, 'CBAM'), ('mbconv_k5_t1', 0, 'CBAM'), ('mbconv_k5_t1', 1, 'Identity'), ('skip_connect', 2, 'GE_theta-plus'), ('dil_conv_5x5', 2, 'Identity'), ('mbconv_k5_t1', 2, 'BAM'), ('octave_conv_5x5', 3, 'GE_theta-plus')], reduce_concat=[2, 3, 4, 5], normal_bottleneck='', reduce_bottleneck='')
+
+Saved selected architectures to nsga2_selected_architectures.json
+Elapsed time: 55.313008069992065 seconds
