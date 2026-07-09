@@ -63,7 +63,7 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
     def __init__(self, soga, n_var=48, proxy_name="synflow"):
         super().__init__(
             n_var=n_var,
-            n_obj=2,
+            n_obj=3,
             n_ieq_constr=0,
             xl=np.zeros(n_var),
             xu=np.ones(n_var) * 0.99,
@@ -71,7 +71,7 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
         self.soga = soga
         self.proxy_name = proxy_name
 
-    def _evaluate(self, x, out, *args, **kwargs):
+    """def _evaluate(self, x, out, *args, **kwargs):
         try:
             record = self.soga.evaluate_architecture_metrics(
                 x,
@@ -83,8 +83,9 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
             # Objective 2: minimize FLOPs.
             proxy_obj = -record["log_proxy_score"]
             flops_obj = record["flops_billion"]
+            zico_obj=-record["zico"]
 
-            out["F"] = np.array([proxy_obj, flops_obj], dtype=float)
+            out["F"] = np.array([proxy_obj, flops_obj,zico_obj], dtype=float)
 
         except Exception as e:
             record = {
@@ -97,12 +98,85 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
             }
 
             # Bad architecture gets punished.
-            out["F"] = np.array([1e9, 1e9], dtype=float)
+            out["F"] = np.array([1e9, 1e9, 1e9], dtype=float)"""
+    
+    def _evaluate(self, x, out, *args, **kwargs):
 
-        self.soga.nsga2_archive.append(record)
+        try:
+            record = self.soga.evaluate_architecture_metrics(
+                x,
+                proxy_name=self.proxy_name
+            )
+
+            proxy_obj = -record["log_proxy_score"]
+            flops_obj = record["flops_billion"]
+            zico_obj = -record["zico"]
+
+            print("DEBUG OBJECTIVES:", proxy_obj, flops_obj, zico_obj)
+
+            out["F"] = np.array([proxy_obj, flops_obj, zico_obj], dtype=float)
+
+            record["objective_vector"] = [
+            float(proxy_obj),
+            float(flops_obj),
+            float(zico_obj)
+            ]               
+
+            self.soga.nsga2_archive.append(record)
+
+        except Exception as e:
+            print("\n================ NSGA-II EVALUATION ERROR ================")
+            print("Candidate x:", x)
+            import traceback
+            traceback.print_exc()
+            print("==========================================================\n")
+
+            raise
+
 
 
 class SOGA(Optimizer): 
+
+    def build_model_from_individual(self, individual, is_final=False):
+        """
+        Rebuild a NetworkCIFAR model from the exact saved NSGA-II individual.
+
+        Use this for final training because record["individual"] is the actual
+        decoded architecture selected from the Pareto front.
+        """
+        info = INFO[self.medmnist_dataset]
+        n_classes = len(info["label"])
+
+        individual = list(individual)
+
+        # JSON may store integers as floats, so force operation choices/layer count back to int where needed.
+        fixed_individual = []
+        for i, v in enumerate(individual):
+            if isinstance(v, float) and float(v).is_integer():
+                fixed_individual.append(int(v))
+            else:
+                fixed_individual.append(v)
+
+        fixed_individual[-1] = int(fixed_individual[-1])
+
+        decoded_cell = decode_cell(
+            decode_operations(fixed_individual[:-1], self.pop.indexes)
+        )
+
+        model = NetworkCIFAR(
+            self.n_channels,
+            n_classes,
+            fixed_individual[-1],
+            True,
+            decoded_cell,
+            self.is_medmnist,
+            is_final,
+            self.dropout_rate,
+            "FP32",
+            False
+        )
+
+        return model, decoded_cell, n_classes
 
     def build_model_from_solution(self, solution):
         info = INFO[self.medmnist_dataset]
@@ -157,6 +231,7 @@ class SOGA(Optimizer):
 
         proxy_score = float(measures[proxy_name])
         flops = float(measures["flops"])
+        zico_score = float(measures["zico"])
         params = float(measures.get("params", 0.0))
         macs = float(measures.get("macs", 0.0))
         sizemb = float(measures.get("sizemb", 0.0))
@@ -182,137 +257,217 @@ class SOGA(Optimizer):
             "macs_billion": macs / 1e9,
             "sizemb": sizemb,
             "latency": latency,
+            "zico": zico_score,
         }
 
         self.last_eval_record = record
         return record
     
-    def select_nsga2_architectures(self, records): #added function
+    def select_nsga2_architectures(self, records, top_k=2):
         valid = []
+        seen = set()
 
         for r in records:
-            if "error" in r:
+            if r is None:
                 continue
+            if r.get("error", None) is not None:
+                continue
+
+            required_keys = [
+                "proxy_score",
+                "log_proxy_score",
+                "zico",
+                "flops",
+                "flops_billion",
+                "decoded_cell"
+            ]
+
+            if any(k not in r for k in required_keys):
+                continue
+
             if not np.isfinite(r["proxy_score"]):
+                continue
+            if not np.isfinite(r["log_proxy_score"]):
+                continue
+            if not np.isfinite(r["zico"]):
                 continue
             if not np.isfinite(r["flops"]):
                 continue
+
+            # avoid duplicate architectures
+            key = r["decoded_cell"]
+            if key in seen:
+                continue
+
+            seen.add(key)
             valid.append(r)
 
         if len(valid) == 0:
             raise RuntimeError("No valid architectures were evaluated by NSGA-II.")
 
-        # Remove duplicate decoded cells; keep the one with higher proxy.
-        dedup = {}
-        for r in valid:
-            key = r["decoded_cell"]
-            if key not in dedup:
-                dedup[key] = r
-            elif r["proxy_score"] > dedup[key]["proxy_score"]:
-                dedup[key] = r
-
-        valid = list(dedup.values())
-
-        # Build minimization objective matrix:
-        # f1 = -log_proxy_score, lower is better
-        # f2 = flops_billion, lower is better
+        # pymoo minimizes all objectives:
+        #   -log_proxy_score -> maximize SynFlow
+        #   flops_billion    -> minimize FLOPs
+        #   -zico            -> maximize ZiCO
         F = np.array([
-            [-r["log_proxy_score"], r["flops_billion"]]
+            [-r["log_proxy_score"], r["flops_billion"], -r["zico"]]
             for r in valid
         ], dtype=float)
 
-        pareto_indices = NonDominatedSorting().do(
+        nd_idx = NonDominatedSorting().do(
             F,
             only_non_dominated_front=True
         )
 
-        pareto = [valid[i] for i in pareto_indices]
+        pareto = [valid[i] for i in nd_idx]
 
-        # 1. Best architecture by zero-cost proxy only.
-        best_proxy = max(valid, key=lambda r: r["proxy_score"])
-
-        # 2. Best architecture by FLOPs only.
-        best_flops = min(valid, key=lambda r: r["flops"])
-
-        # 3 and 4. Balanced choices from Pareto front.
+        # Normalize objectives into benefit scores:
+        #   proxy_norm = 1 means best SynFlow
+        #   zico_norm  = 1 means best ZiCO
+        #   flops_norm = 1 means lowest FLOPs
         log_proxy_values = np.array([r["log_proxy_score"] for r in pareto], dtype=float)
+        zico_values = np.array([r["zico"] for r in pareto], dtype=float)
         flops_values = np.array([r["flops"] for r in pareto], dtype=float)
 
         eps = 1e-12
 
-        proxy_min = log_proxy_values.min()
-        proxy_max = log_proxy_values.max()
-
-        flops_min = flops_values.min()
-        flops_max = flops_values.max()
+        proxy_min, proxy_max = log_proxy_values.min(), log_proxy_values.max()
+        zico_min, zico_max = zico_values.min(), zico_values.max()
+        flops_min, flops_max = flops_values.min(), flops_values.max()
 
         for r in pareto:
-            # Higher proxy is better.
-            proxy_norm = (r["log_proxy_score"] - proxy_min) / (proxy_max - proxy_min + eps)
+            if proxy_max - proxy_min < eps:
+                proxy_norm = 1.0
+            else:
+                proxy_norm = (r["log_proxy_score"] - proxy_min) / (proxy_max - proxy_min + eps)
 
-            # Lower FLOPs is better, so invert.
-            flops_norm = (flops_max - r["flops"]) / (flops_max - flops_min + eps)
+            if zico_max - zico_min < eps:
+                zico_norm = 1.0
+            else:
+                zico_norm = (r["zico"] - zico_min) / (zico_max - zico_min + eps)
+
+            if flops_max - flops_min < eps:
+                flops_norm = 1.0
+            else:
+                flops_norm = (flops_max - r["flops"]) / (flops_max - flops_min + eps)
 
             r["proxy_norm"] = float(proxy_norm)
+            r["zico_norm"] = float(zico_norm)
             r["flops_norm"] = float(flops_norm)
 
-            # Ideal point is proxy_norm=1 and flops_norm=1.
             r["balanced_distance"] = float(
-                math.sqrt((1.0 - proxy_norm) ** 2 + (1.0 - flops_norm) ** 2)
+                math.sqrt(
+                    (1.0 - proxy_norm) ** 2 +
+                    (1.0 - zico_norm) ** 2 +
+                    (1.0 - flops_norm) ** 2
+                )
             )
 
-            r["balanced_score"] = float(0.5 * proxy_norm + 0.5 * flops_norm)
+            r["balanced_score"] = float(
+                (proxy_norm + zico_norm + flops_norm) / 3.0
+            )
 
-        excluded = {
-            best_proxy["decoded_cell"],
-            best_flops["decoded_cell"],
-        }
-
-        balanced_pool = [
-            r for r in sorted(pareto, key=lambda r: r["balanced_distance"])
-            if r["decoded_cell"] not in excluded
-        ]
-
-        if len(balanced_pool) >= 2:
-            best_balanced = balanced_pool[:2]
-        else:
-            best_balanced = sorted(pareto, key=lambda r: r["balanced_distance"])[:2]
+        # Select the two Pareto architectures closest to the ideal point.
+        selected_two = sorted(
+            pareto,
+            key=lambda r: (r["balanced_distance"], -r["balanced_score"])
+        )[:top_k]
 
         selected = {
-            "best_proxy_architecture": best_proxy,
-            "best_flops_architecture": best_flops,
-            "best_balanced_architectures": best_balanced,
+            "selected_architectures": selected_two,
             "pareto_front": pareto,
             "all_valid_architectures": valid,
         }
 
-        with open("nsga2_selected_architectures.json", "w") as f:
+        with open("nsga2_selected_two_architectures.json", "w") as f:
             json.dump(selected, f, indent=2)
 
-        print("\n================ NSGA-II SELECTED ARCHITECTURES ================")
+        self.plot_pareto_front(
+            valid=valid,
+            pareto=pareto,
+            selected=selected_two,
+            save_path="nsga2_pareto_front.png"
+        )
 
-        def show(name, r):
-            print(f"\n{name}")
+        print("\nSelected two architectures from Pareto front:")
+
+        for i, r in enumerate(selected_two, start=1):
+            print(f"\nSELECTED ARCHITECTURE #{i}")
             print(f"proxy_name: {r['proxy_name']}")
-            print(f"proxy_score: {r['proxy_score']}")
-            print(f"log_proxy_score: {r['log_proxy_score']}")
+            print(f"SynFlow: {r['proxy_score']}")
+            print(f"log10(SynFlow): {r['log_proxy_score']}")
+            print(f"ZiCO: {r['zico']}")
             print(f"FLOPs: {r['flops_billion']:.6f} B")
-            print(f"params: {r['params_million']:.6f} M")
+            print(f"Params: {r['params_million']:.6f} M")
             print(f"MACs: {r['macs_billion']:.6f} B")
-            print(f"latency: {r['latency']:.4f} ms")
-            print(f"balanced_distance: {r.get('balanced_distance', None)}")
+            print(f"Latency: {r['latency']:.4f} ms")
+            print(f"proxy_norm: {r['proxy_norm']:.4f}")
+            print(f"zico_norm: {r['zico_norm']:.4f}")
+            print(f"flops_norm: {r['flops_norm']:.4f}")
+            print(f"balanced_distance: {r['balanced_distance']:.4f}")
+            print(f"balanced_score: {r['balanced_score']:.4f}")
             print(f"individual: {r['individual']}")
             print(f"decoded_cell: {r['decoded_cell']}")
 
-        show("BEST PURE PROXY", best_proxy)
-        show("BEST PURE FLOPs", best_flops)
-
-        for i, r in enumerate(best_balanced, start=1):
-            show(f"BEST BALANCED #{i}", r)
-
-        print("\nSaved selected architectures to nsga2_selected_architectures.json")
+        print("\nSaved selected architectures to: nsga2_selected_two_architectures.json")
+        print("Saved Pareto plot to: nsga2_pareto_front.png")
 
         return selected
+    
+    def plot_pareto_front(self, valid, pareto, selected, save_path="nsga2_pareto_front.png"):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        all_flops = [r["flops_billion"] for r in valid]
+        all_proxy = [r["log_proxy_score"] for r in valid]
+        all_zico = [r["zico"] for r in valid]
+
+        pareto_flops = [r["flops_billion"] for r in pareto]
+        pareto_proxy = [r["log_proxy_score"] for r in pareto]
+        pareto_zico = [r["zico"] for r in pareto]
+
+        selected_flops = [r["flops_billion"] for r in selected]
+        selected_proxy = [r["log_proxy_score"] for r in selected]
+        selected_zico = [r["zico"] for r in selected]
+
+        fig = plt.figure(figsize=(9, 7))
+        ax = fig.add_subplot(111, projection="3d")
+
+        ax.scatter(
+            all_flops,
+            all_proxy,
+            all_zico,
+            alpha=0.25,
+            label="All valid architectures"
+        )
+
+        ax.scatter(
+            pareto_flops,
+            pareto_proxy,
+            pareto_zico,
+            s=45,
+            label="Pareto front"
+        )
+
+        ax.scatter(
+            selected_flops,
+            selected_proxy,
+            selected_zico,
+            s=140,
+            marker="*",
+            label="Selected top 2"
+        )
+
+        ax.set_xlabel("FLOPs (billions, lower is better)")
+        ax.set_ylabel("log10(SynFlow, higher is better)")
+        ax.set_zlabel("ZiCO (higher is better)")
+        ax.set_title("NSGA-II Pareto front: SynFlow vs FLOPs vs ZiCO")
+
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=200)
+        plt.close(fig)
     
     def nsga2_evolve(self, pop_size=10, n_gen=2, seed=1, proxy_name="synflow"): #old evolve algorithm is kept for backwards compatibility not removed yet
         self.nsga2_archive = []
@@ -345,7 +500,10 @@ class SOGA(Optimizer):
         print("\nNSGA-II Pareto objective values:")
         print(results.F)
 
-        selected = self.select_nsga2_architectures(self.nsga2_archive)
+        selected = self.select_nsga2_architectures(
+            self.nsga2_archive,
+            top_k=2
+        )
 
         return selected
     
@@ -435,6 +593,137 @@ class SOGA(Optimizer):
 
 
         print("Final loss is ",loss)
+    
+    def train_selected_nsga2_architectures_with_da(
+        self,
+        selected=None,
+        selected_json="nsga2_selected_two_architectures.json",
+        output_root="./output",
+        da_search_epochs=100,
+        final_train_epochs=300,
+        batch_size=128,
+        gpu_ids="",
+        download=True,
+    ):
+        """
+        Train and evaluate the two architectures selected from the NSGA-II Pareto front.
+
+        For each selected architecture:
+            1. rebuild model from saved individual
+            2. search best DA policy on validation set
+            3. rebuild fresh model
+            4. train with best DA policy
+            5. evaluate on test set
+        """
+
+        if selected is None:
+            with open(selected_json, "r") as f:
+                selected = json.load(f)
+
+        selected_architectures = selected["selected_architectures"]
+
+        all_results = []
+
+        for idx, record in enumerate(selected_architectures, start=1):
+            run_name = f"nsga2_selected_arch_{idx}"
+            data_flag = self.medmnist_dataset
+
+            print("\n" + "=" * 80)
+            print(f"Training NSGA-II selected architecture #{idx}")
+            print("=" * 80)
+
+            print("Selected architecture search metrics:")
+            print(f"SynFlow: {record.get('proxy_score')}")
+            print(f"log10(SynFlow): {record.get('log_proxy_score')}")
+            print(f"ZiCO: {record.get('zico')}")
+            print(f"FLOPs_B: {record.get('flops_billion')}")
+            print(f"Params_M: {record.get('params_million')}")
+            print(f"Balanced distance: {record.get('balanced_distance')}")
+            print(f"Balanced score: {record.get('balanced_score')}")
+
+            individual = record["individual"]
+
+            # ------------------------------------------------------------------
+            # 1. Build model for DA policy search
+            # ------------------------------------------------------------------
+            da_model, decoded_cell, n_classes = self.build_model_from_individual(
+                individual,
+                is_final=False
+            )
+
+            # ------------------------------------------------------------------
+            # 2. Search best DA policy using validation performance
+            # ------------------------------------------------------------------
+            best_da_policy = self.evaluator.auto_search_daapolicy(
+                da_model,
+                da_search_epochs,
+                hash_indv=None,
+                grad_clip=5,
+                evaluation="valid",
+                data_flag=data_flag,
+                output_root=output_root,
+                num_epochs=da_search_epochs,
+                gpu_ids=gpu_ids,
+                batch_size=batch_size,
+                is_final=False,
+                download=download,
+                run=run_name + "_da_search"
+            )
+
+            print(f"\nBest DA policy for selected architecture #{idx}:")
+            print(best_da_policy)
+
+            # ------------------------------------------------------------------
+            # 3. Rebuild fresh model for final training, do not reuse da_model because da search may have trained/modified it
+            # ------------------------------------------------------------------
+            final_model, _, _ = self.build_model_from_individual(
+                individual,
+                is_final=True
+            )
+
+            # ------------------------------------------------------------------
+            # 4. Train final model with selected DA policy
+            # ------------------------------------------------------------------
+            test_result = self.evaluator.train(
+                best_da_policy,
+                final_model,
+                final_train_epochs,
+                hash_indv=None,
+                grad_clip=5,
+                evaluation="test",
+                data_flag=data_flag,
+                output_root=output_root,
+                num_epochs=final_train_epochs,
+                gpu_ids=gpu_ids,
+                batch_size=batch_size,
+                is_final=True, #important so evaluator.train() appllies the chosen da policy
+                download=download,
+                run=run_name + "_final_test"
+            )
+
+            result = {
+                "rank": idx,
+                "run_name": run_name,
+                "search_record": record,
+                "best_da_policy": str(best_da_policy),
+                "test_result": test_result,
+                "decoded_cell": repr(decoded_cell),
+                "individual": individual,
+            }
+
+            all_results.append(result)
+
+            print(f"\nFinal test result for selected architecture #{idx}:")
+            print(test_result)
+
+        with open("nsga2_selected_two_da_training_results.json", "w") as f:
+            json.dump(all_results, f, indent=2)
+
+        print("\nSaved DA training results to:")
+        print("nsga2_selected_two_da_training_results.json")
+
+        return all_results
+
     def mealypy_evolve(self, algorithm, pop_size=15, epoch=20,medmnist_dataset=None):
 
         ## Design a problem dictionary for multiple objective functions above

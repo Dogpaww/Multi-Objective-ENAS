@@ -242,7 +242,7 @@ class Evaluate:
         dataload = 'random'
         init_w_type = 'none'
         init_b_type = 'none'
-        dataload_info = 1
+        dataload_info = 4 #use =4 for a more serious run
         # if '3d' in self.medmnist_dataset:
         #     model = ACSConverter(model)
 
@@ -253,7 +253,7 @@ class Evaluate:
                                             (dataload, 1, n_classes),
                                             self.device,
                                             loss_fn = criterion,
-                                            measure_names={'grad_norm','snip','synflow','plain'}
+                                            measure_names={'grad_norm','snip','synflow','plain','zico'}
                                             )
         else:
             measures = predictive.find_measures(model,self.medmnist_dataset,
@@ -261,7 +261,7 @@ class Evaluate:
                                             (dataload, 1, n_classes),
                                             self.device,
                                             loss_fn = criterion,
-                                            measure_names={'grad_norm','snip','synflow','plain'}
+                                            measure_names={'grad_norm','snip','synflow','plain','zico'}
                                             )
         #print(measures)
 
@@ -325,6 +325,7 @@ class Evaluate:
 
         measures['proxy_name'] = 'synflow' #added line
         measures['proxy_score'] = float(measures['synflow']) #added line
+        measures['zico']=float(measures['zico'])
 
 
         return measures
@@ -801,8 +802,8 @@ class Evaluate:
         else:
                 input_tensor = torch.randn(4, 3, 256, 256)  # Replace with your input size
 
-        input_tensor = input_tensor.cuda()
-        model = model.cuda()
+        input_tensor=input_tensor.to(device)
+        model = model.to(device)
         print(input_tensor.device)
         #print(model.device)
         flops, params = profile(model, inputs=(input_tensor,))

@@ -111,15 +111,26 @@ if __name__ == '__main__':
   # Record the start time
   start_time = time.time()
 
+  
+
   # Running the algorithm
   #ga.mealypy_evolve('de',10,2,medmnist_dataset) -> old call
-  ga.nsga2_evolve(
+  selected=ga.nsga2_evolve(
     pop_size=10,
     n_gen=2,
     seed=1,
     proxy_name="synflow"
 ) #for smoke test pop size=10 n_gen=2,real run =20,10
   # Record the end time
+
+  ga.train_selected_nsga2_architectures_with_da(
+    selected=selected,
+    da_search_epochs=1,
+    final_train_epochs=1,
+    batch_size=32,
+    gpu_ids="-1",
+)
+  
   end_time = time.time()
 
   # Calculate the elapsed time

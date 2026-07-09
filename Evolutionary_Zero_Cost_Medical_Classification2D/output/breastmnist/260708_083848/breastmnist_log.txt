@@ -1,0 +1,7 @@
+breastmnist
+train  auc: 0.43488  acc: 0.72894
+   f1: 0.61620
+val  auc: 0.43442  acc: 0.73077
+   f1: 0.61620
+test  auc: 0.48747  acc: 0.73077
+   f1: 0.61620
