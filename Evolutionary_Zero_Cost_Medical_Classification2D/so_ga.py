@@ -137,6 +137,8 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
 
 class SOGA(Optimizer): 
 
+    
+
     def build_model_from_individual(self, individual, is_final=False):
         """
         Rebuild a NetworkCIFAR model from the exact saved NSGA-II individual.
@@ -218,6 +220,98 @@ class SOGA(Optimizer):
         )
 
         return individual, decoded_cell, decoded_model, n_classes
+    
+    def rank_architectures_topsis(
+        self,
+        records,
+        weights=(0.4, 0.4, 0.2),
+        criteria=("log_proxy_score", "zico", "flops_billion"),
+        benefit=(True, True, False),
+    ):
+        """
+        TOPSIS ranking for Pareto-front architecture selection.
+
+        Criteria:
+            log_proxy_score: benefit criterion, higher is better
+            zico: benefit criterion, higher is better
+            flops_billion: cost criterion, lower is better
+
+        Weights:
+            log_proxy_score = 0.4
+            zico = 0.4
+            flops_billion = 0.2
+        """
+
+        eps = 1e-12
+
+        valid = []
+        for r in records:
+            ok = True
+            for c in criteria:
+                if c not in r:
+                    ok = False
+                    break
+                if not np.isfinite(float(r[c])):
+                    ok = False
+                    break
+            if ok:
+                valid.append(r)
+
+        if len(valid) == 0:
+            raise RuntimeError("No valid architectures available for TOPSIS ranking.")
+
+        # Decision matrix
+        X = np.array(
+            [[float(r[c]) for c in criteria] for r in valid],
+            dtype=float
+        )
+
+        # Normalize weights
+        weights = np.array(weights, dtype=float)
+        weights = weights / (np.sum(weights) + eps)
+
+        # Step 1: vector normalization
+        norm = np.sqrt(np.sum(X ** 2, axis=0)) + eps
+        R = X / norm
+
+        # Step 2: weighted normalized decision matrix
+        V = R * weights
+
+        # Step 3: ideal best and ideal worst
+        ideal_best = np.zeros(len(criteria))
+        ideal_worst = np.zeros(len(criteria))
+
+        for j, is_benefit in enumerate(benefit):
+            if is_benefit:
+                ideal_best[j] = np.max(V[:, j])
+                ideal_worst[j] = np.min(V[:, j])
+            else:
+                ideal_best[j] = np.min(V[:, j])
+                ideal_worst[j] = np.max(V[:, j])
+
+        # Step 4: distance from ideal best and ideal worst
+        d_best = np.sqrt(np.sum((V - ideal_best) ** 2, axis=1))
+        d_worst = np.sqrt(np.sum((V - ideal_worst) ** 2, axis=1))
+
+        # Step 5: TOPSIS closeness coefficient
+        topsis_score = d_worst / (d_best + d_worst + eps)
+
+        ranked = []
+        for i, r in enumerate(valid):
+            r = dict(r)
+            r["topsis_d_best"] = float(d_best[i])
+            r["topsis_d_worst"] = float(d_worst[i])
+            r["topsis_score"] = float(topsis_score[i])
+            r["topsis_weights"] = {
+                "log_proxy_score": 0.4,
+                "zico": 0.4,
+                "flops_billion": 0.2,
+            }
+            ranked.append(r)
+
+        ranked = sorted(ranked, key=lambda r: r["topsis_score"], reverse=True)
+
+        return ranked
 
 
     def evaluate_architecture_metrics(self, solution, proxy_name="synflow"):
@@ -263,156 +357,55 @@ class SOGA(Optimizer):
         self.last_eval_record = record
         return record
     
-    def select_nsga2_architectures(self, records, top_k=2):
-        valid = []
-        seen = set()
+    ranked_pareto = self.rank_architectures_topsis(
+        pareto,
+        weights=(0.4, 0.4, 0.2),
+        criteria=("log_proxy_score", "zico", "flops_billion"),
+        benefit=(True, True, False),
+    )
 
-        for r in records:
-            if r is None:
-                continue
-            if r.get("error", None) is not None:
-                continue
+    selected_top2 = ranked_pareto[:top_k]
 
-            required_keys = [
-                "proxy_score",
-                "log_proxy_score",
-                "zico",
-                "flops",
-                "flops_billion",
-                "decoded_cell"
-            ]
+    selected = {
+        "selection_method": "TOPSIS",
+        "topsis_criteria": ["log_proxy_score", "zico", "flops_billion"],
+        "topsis_weights": {
+            "log_proxy_score": 0.4,
+            "zico": 0.4,
+            "flops_billion": 0.2,
+        },
+        "topsis_criteria_type": {
+            "log_proxy_score": "benefit",
+            "zico": "benefit",
+            "flops_billion": "cost",
+        },
+        "selected_architectures": selected_top2,
+        "ranked_pareto_front": ranked_pareto,
+        "pareto_front": pareto,
+        "all_valid_architectures": valid,
+    }
+    with open("nsga2_selected_two_architectures.json", "w") as f:
+        json.dump(selected, f, indent=2, default=str)
 
-            if any(k not in r for k in required_keys):
-                continue
+    print("\n================ TOPSIS SELECTED ARCHITECTURES ================")
+    print("Weights: SynFlow/log_proxy_score = 0.4, ZiCO = 0.4, FLOPs = 0.2")
 
-            if not np.isfinite(r["proxy_score"]):
-                continue
-            if not np.isfinite(r["log_proxy_score"]):
-                continue
-            if not np.isfinite(r["zico"]):
-                continue
-            if not np.isfinite(r["flops"]):
-                continue
+    for i, r in enumerate(selected_top2, start=1):
+        print(f"\nSELECTED ARCHITECTURE #{i}")
+        print(f"TOPSIS score: {r['topsis_score']:.6f}")
+        print(f"Distance to ideal best: {r['topsis_d_best']:.6f}")
+        print(f"Distance to ideal worst: {r['topsis_d_worst']:.6f}")
+        print(f"SynFlow: {r['proxy_score']}")
+        print(f"log10(SynFlow): {r['log_proxy_score']}")
+        print(f"ZiCO: {r['zico']}")
+        print(f"FLOPs: {r['flops_billion']:.6f} B")
+        print(f"Params: {r['params_million']:.6f} M")
+        print(f"MACs: {r['macs_billion']:.6f} B")
+        print(f"Latency: {r['latency']:.4f} ms")
+        print(f"individual: {r['individual']}")
+        print(f"decoded_cell: {r['decoded_cell']}")
 
-            # avoid duplicate architectures
-            key = r["decoded_cell"]
-            if key in seen:
-                continue
-
-            seen.add(key)
-            valid.append(r)
-
-        if len(valid) == 0:
-            raise RuntimeError("No valid architectures were evaluated by NSGA-II.")
-
-        # pymoo minimizes all objectives:
-        #   -log_proxy_score -> maximize SynFlow
-        #   flops_billion    -> minimize FLOPs
-        #   -zico            -> maximize ZiCO
-        F = np.array([
-            [-r["log_proxy_score"], r["flops_billion"], -r["zico"]]
-            for r in valid
-        ], dtype=float)
-
-        nd_idx = NonDominatedSorting().do(
-            F,
-            only_non_dominated_front=True
-        )
-
-        pareto = [valid[i] for i in nd_idx]
-
-        # Normalize objectives into benefit scores:
-        #   proxy_norm = 1 means best SynFlow
-        #   zico_norm  = 1 means best ZiCO
-        #   flops_norm = 1 means lowest FLOPs
-        log_proxy_values = np.array([r["log_proxy_score"] for r in pareto], dtype=float)
-        zico_values = np.array([r["zico"] for r in pareto], dtype=float)
-        flops_values = np.array([r["flops"] for r in pareto], dtype=float)
-
-        eps = 1e-12
-
-        proxy_min, proxy_max = log_proxy_values.min(), log_proxy_values.max()
-        zico_min, zico_max = zico_values.min(), zico_values.max()
-        flops_min, flops_max = flops_values.min(), flops_values.max()
-
-        for r in pareto:
-            if proxy_max - proxy_min < eps:
-                proxy_norm = 1.0
-            else:
-                proxy_norm = (r["log_proxy_score"] - proxy_min) / (proxy_max - proxy_min + eps)
-
-            if zico_max - zico_min < eps:
-                zico_norm = 1.0
-            else:
-                zico_norm = (r["zico"] - zico_min) / (zico_max - zico_min + eps)
-
-            if flops_max - flops_min < eps:
-                flops_norm = 1.0
-            else:
-                flops_norm = (flops_max - r["flops"]) / (flops_max - flops_min + eps)
-
-            r["proxy_norm"] = float(proxy_norm)
-            r["zico_norm"] = float(zico_norm)
-            r["flops_norm"] = float(flops_norm)
-
-            r["balanced_distance"] = float(
-                math.sqrt(
-                    (1.0 - proxy_norm) ** 2 +
-                    (1.0 - zico_norm) ** 2 +
-                    (1.0 - flops_norm) ** 2
-                )
-            )
-
-            r["balanced_score"] = float(
-                (proxy_norm + zico_norm + flops_norm) / 3.0
-            )
-
-        # Select the two Pareto architectures closest to the ideal point.
-        selected_two = sorted(
-            pareto,
-            key=lambda r: (r["balanced_distance"], -r["balanced_score"])
-        )[:top_k]
-
-        selected = {
-            "selected_architectures": selected_two,
-            "pareto_front": pareto,
-            "all_valid_architectures": valid,
-        }
-
-        with open("nsga2_selected_two_architectures.json", "w") as f:
-            json.dump(selected, f, indent=2)
-
-        self.plot_pareto_front(
-            valid=valid,
-            pareto=pareto,
-            selected=selected_two,
-            save_path="nsga2_pareto_front.png"
-        )
-
-        print("\nSelected two architectures from Pareto front:")
-
-        for i, r in enumerate(selected_two, start=1):
-            print(f"\nSELECTED ARCHITECTURE #{i}")
-            print(f"proxy_name: {r['proxy_name']}")
-            print(f"SynFlow: {r['proxy_score']}")
-            print(f"log10(SynFlow): {r['log_proxy_score']}")
-            print(f"ZiCO: {r['zico']}")
-            print(f"FLOPs: {r['flops_billion']:.6f} B")
-            print(f"Params: {r['params_million']:.6f} M")
-            print(f"MACs: {r['macs_billion']:.6f} B")
-            print(f"Latency: {r['latency']:.4f} ms")
-            print(f"proxy_norm: {r['proxy_norm']:.4f}")
-            print(f"zico_norm: {r['zico_norm']:.4f}")
-            print(f"flops_norm: {r['flops_norm']:.4f}")
-            print(f"balanced_distance: {r['balanced_distance']:.4f}")
-            print(f"balanced_score: {r['balanced_score']:.4f}")
-            print(f"individual: {r['individual']}")
-            print(f"decoded_cell: {r['decoded_cell']}")
-
-        print("\nSaved selected architectures to: nsga2_selected_two_architectures.json")
-        print("Saved Pareto plot to: nsga2_pareto_front.png")
-
-        return selected
+    print("\nSaved TOPSIS-selected architectures to: nsga2_selected_two_architectures.json")
     
     def plot_pareto_front(self, valid, pareto, selected, save_path="nsga2_pareto_front.png"):
         import matplotlib
