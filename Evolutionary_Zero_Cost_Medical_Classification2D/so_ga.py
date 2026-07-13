@@ -312,6 +312,242 @@ class SOGA(Optimizer):
         ranked = sorted(ranked, key=lambda r: r["topsis_score"], reverse=True)
 
         return ranked
+    def plot_nsga2_fronts(
+        self,
+        valid,
+        selected,
+        save_path="nsga2_3d_front_surfaces.png",
+        max_fronts_to_plot=4,
+        surface_alpha=0.18,
+    ):
+        import matplotlib
+        matplotlib.use("Agg")
+
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+
+        if len(valid) == 0:
+            print("No valid architectures to plot.")
+            return
+
+        # Internal NSGA-II objective matrix.
+        # pymoo minimizes all objectives:
+        #   -log_proxy_score  -> maximize SynFlow
+        #    flops_billion    -> minimize FLOPs
+        #   -zico             -> maximize ZiCO
+        F = np.array([
+            [
+                -float(r["log_proxy_score"]),
+                float(r["flops_billion"]),
+                -float(r["zico"]),
+            ]
+            for r in valid
+        ], dtype=float)
+
+        # Get all nondominated sorting fronts, not just Pareto front 0.
+        fronts = NonDominatedSorting().do(
+            F,
+            only_non_dominated_front=False
+        )
+
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot(111, projection="3d")
+
+        max_fronts_to_plot = min(max_fronts_to_plot, len(fronts))
+
+        for front_rank, front_indices in enumerate(fronts[:max_fronts_to_plot]):
+            front_records = [valid[i] for i in front_indices]
+
+            x = np.array([float(r["flops_billion"]) for r in front_records], dtype=float)
+            y = np.array([float(r["log_proxy_score"]) for r in front_records], dtype=float)
+            z = np.array([float(r["zico"]) for r in front_records], dtype=float)
+
+            # Front 0 should be visually strongest.
+            if front_rank == 0:
+                label = "Front 0 / Pareto front"
+                point_size = 55
+                line_width = 0.9
+                alpha_points = 1.0
+                alpha_surface = surface_alpha + 0.10
+            else:
+                label = f"Front {front_rank}"
+                point_size = 32
+                line_width = 0.5
+                alpha_points = 0.65
+                alpha_surface = surface_alpha
+
+            # Cloud points for this front.
+            ax.scatter(
+                x,
+                y,
+                z,
+                s=point_size,
+                alpha=alpha_points,
+                label=label
+            )
+
+            # Sheet-like triangulated surface.
+            # Needs at least 3 points to form triangles.
+            if len(front_records) >= 3:
+                try:
+                    ax.plot_trisurf(
+                        x,
+                        y,
+                        z,
+                        alpha=alpha_surface,
+                        linewidth=line_width,
+                        edgecolor="black",
+                        antialiased=True
+                    )
+                except Exception as e:
+                    print(f"Could not draw trisurf for Front {front_rank}: {e}")
+
+            # Add a visible front curve by sorting along FLOPs.
+            # This helps even when the surface is sparse.
+            if len(front_records) >= 2:
+                order = np.argsort(x)
+                ax.plot(
+                    x[order],
+                    y[order],
+                    z[order],
+                    linewidth=2.2 if front_rank == 0 else 1.2,
+                    alpha=0.95 if front_rank == 0 else 0.55
+                )
+
+        # Mark TOPSIS-selected architectures.
+        if selected is not None and len(selected) > 0:
+            sx = np.array([float(r["flops_billion"]) for r in selected], dtype=float)
+            sy = np.array([float(r["log_proxy_score"]) for r in selected], dtype=float)
+            sz = np.array([float(r["zico"]) for r in selected], dtype=float)
+
+            ax.scatter(
+                sx,
+                sy,
+                sz,
+                marker="*",
+                s=300,
+                edgecolors="black",
+                linewidths=1.2,
+                label="TOPSIS selected",
+                zorder=20
+            )
+
+            for idx, r in enumerate(selected, start=1):
+                ax.text(
+                    float(r["flops_billion"]),
+                    float(r["log_proxy_score"]),
+                    float(r["zico"]),
+                    f"  TOPSIS #{idx}",
+                    fontsize=9
+                )
+
+        ax.set_xlabel("FLOPs (B, lower is better)")
+        ax.set_ylabel("log10(SynFlow, higher is better)")
+        ax.set_zlabel("ZiCO (higher is better)")
+
+        ax.set_title(
+            "NSGA-II nondominated fronts with TOPSIS-selected architectures"
+        )
+
+        # Adjust view angle for a clearer sheet/cloud look.
+        ax.view_init(elev=24, azim=-135)
+
+        ax.grid(True)
+        ax.legend(loc="best", fontsize=8)
+
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Saved 3D NSGA-II front surface plot to: {save_path}")
+    def select_nsga2_architectures(self, records, top_k=2):
+        # existing valid-record filtering
+        valid = []
+
+        for r in records:
+            if (
+                "log_proxy_score" in r
+                and "zico" in r
+                and "flops_billion" in r
+                and np.isfinite(float(r["log_proxy_score"]))
+                and np.isfinite(float(r["zico"]))
+                and np.isfinite(float(r["flops_billion"]))
+            ):
+                valid.append(r)
+
+        if len(valid) == 0:
+            raise RuntimeError("No valid NSGA-II records found.")
+
+        # Pareto front extraction
+        F = np.array([
+            [-r["log_proxy_score"], r["flops_billion"], -r["zico"]]
+            for r in valid
+        ], dtype=float)
+
+        nd_idx = NonDominatedSorting().do(
+            F,
+            only_non_dominated_front=True
+        )
+
+        pareto = [valid[i] for i in nd_idx]
+
+        # TOPSIS selection goes here
+        ranked_pareto = self.rank_architectures_topsis(
+            pareto,
+            weights=(0.4, 0.4, 0.2),
+            criteria=("log_proxy_score", "zico", "flops_billion"),
+            benefit=(True, True, False),
+        )
+
+        selected_top2 = ranked_pareto[:top_k]
+
+        selected = {
+            "selection_method": "TOPSIS",
+            "topsis_criteria": ["log_proxy_score", "zico", "flops_billion"],
+            "topsis_weights": {
+                "log_proxy_score": 0.4,
+                "zico": 0.4,
+                "flops_billion": 0.2,
+            },
+            "topsis_criteria_type": {
+                "log_proxy_score": "benefit",
+                "zico": "benefit",
+                "flops_billion": "cost",
+            },
+            "selected_architectures": selected_top2,
+            "ranked_pareto_front": ranked_pareto,
+            "pareto_front": pareto,
+            "all_valid_architectures": valid,
+        }
+
+        with open("nsga2_selected_two_architectures.json", "w") as f:
+            json.dump(selected, f, indent=2, default=str)
+
+        print("\n================ TOPSIS SELECTED ARCHITECTURES ================")
+        print("Weights: SynFlow/log_proxy_score = 0.4, ZiCO = 0.4, FLOPs = 0.2")
+
+        for i, r in enumerate(selected_top2, start=1):
+            print(f"\nSELECTED ARCHITECTURE #{i}")
+            print(f"TOPSIS score: {r['topsis_score']:.6f}")
+            print(f"Distance to ideal best: {r['topsis_d_best']:.6f}")
+            print(f"Distance to ideal worst: {r['topsis_d_worst']:.6f}")
+            print(f"SynFlow: {r['proxy_score']}")
+            print(f"log10(SynFlow): {r['log_proxy_score']}")
+            print(f"ZiCO: {r['zico']}")
+            print(f"FLOPs: {r['flops_billion']:.6f} B")
+            print(f"Params: {r['params_million']:.6f} M")
+            print(f"MACs: {r['macs_billion']:.6f} B")
+            print(f"Latency: {r['latency']:.4f} ms")
+            print(f"individual: {r['individual']}")
+            print(f"decoded_cell: {r['decoded_cell']}")
+
+        print("\nSaved TOPSIS-selected architectures to: nsga2_selected_two_architectures.json")
+
+        self.plot_nsga2_fronts(valid=valid, selected=selected_top2, save_path="nsga2_ranked_fronts.png")
+
+        return selected
+
 
 
     def evaluate_architecture_metrics(self, solution, proxy_name="synflow"):
@@ -357,110 +593,7 @@ class SOGA(Optimizer):
         self.last_eval_record = record
         return record
     
-    ranked_pareto = self.rank_architectures_topsis(
-        pareto,
-        weights=(0.4, 0.4, 0.2),
-        criteria=("log_proxy_score", "zico", "flops_billion"),
-        benefit=(True, True, False),
-    )
-
-    selected_top2 = ranked_pareto[:top_k]
-
-    selected = {
-        "selection_method": "TOPSIS",
-        "topsis_criteria": ["log_proxy_score", "zico", "flops_billion"],
-        "topsis_weights": {
-            "log_proxy_score": 0.4,
-            "zico": 0.4,
-            "flops_billion": 0.2,
-        },
-        "topsis_criteria_type": {
-            "log_proxy_score": "benefit",
-            "zico": "benefit",
-            "flops_billion": "cost",
-        },
-        "selected_architectures": selected_top2,
-        "ranked_pareto_front": ranked_pareto,
-        "pareto_front": pareto,
-        "all_valid_architectures": valid,
-    }
-    with open("nsga2_selected_two_architectures.json", "w") as f:
-        json.dump(selected, f, indent=2, default=str)
-
-    print("\n================ TOPSIS SELECTED ARCHITECTURES ================")
-    print("Weights: SynFlow/log_proxy_score = 0.4, ZiCO = 0.4, FLOPs = 0.2")
-
-    for i, r in enumerate(selected_top2, start=1):
-        print(f"\nSELECTED ARCHITECTURE #{i}")
-        print(f"TOPSIS score: {r['topsis_score']:.6f}")
-        print(f"Distance to ideal best: {r['topsis_d_best']:.6f}")
-        print(f"Distance to ideal worst: {r['topsis_d_worst']:.6f}")
-        print(f"SynFlow: {r['proxy_score']}")
-        print(f"log10(SynFlow): {r['log_proxy_score']}")
-        print(f"ZiCO: {r['zico']}")
-        print(f"FLOPs: {r['flops_billion']:.6f} B")
-        print(f"Params: {r['params_million']:.6f} M")
-        print(f"MACs: {r['macs_billion']:.6f} B")
-        print(f"Latency: {r['latency']:.4f} ms")
-        print(f"individual: {r['individual']}")
-        print(f"decoded_cell: {r['decoded_cell']}")
-
-    print("\nSaved TOPSIS-selected architectures to: nsga2_selected_two_architectures.json")
-    
-    def plot_pareto_front(self, valid, pareto, selected, save_path="nsga2_pareto_front.png"):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-
-        all_flops = [r["flops_billion"] for r in valid]
-        all_proxy = [r["log_proxy_score"] for r in valid]
-        all_zico = [r["zico"] for r in valid]
-
-        pareto_flops = [r["flops_billion"] for r in pareto]
-        pareto_proxy = [r["log_proxy_score"] for r in pareto]
-        pareto_zico = [r["zico"] for r in pareto]
-
-        selected_flops = [r["flops_billion"] for r in selected]
-        selected_proxy = [r["log_proxy_score"] for r in selected]
-        selected_zico = [r["zico"] for r in selected]
-
-        fig = plt.figure(figsize=(9, 7))
-        ax = fig.add_subplot(111, projection="3d")
-
-        ax.scatter(
-            all_flops,
-            all_proxy,
-            all_zico,
-            alpha=0.25,
-            label="All valid architectures"
-        )
-
-        ax.scatter(
-            pareto_flops,
-            pareto_proxy,
-            pareto_zico,
-            s=45,
-            label="Pareto front"
-        )
-
-        ax.scatter(
-            selected_flops,
-            selected_proxy,
-            selected_zico,
-            s=140,
-            marker="*",
-            label="Selected top 2"
-        )
-
-        ax.set_xlabel("FLOPs (billions, lower is better)")
-        ax.set_ylabel("log10(SynFlow, higher is better)")
-        ax.set_zlabel("ZiCO (higher is better)")
-        ax.set_title("NSGA-II Pareto front: SynFlow vs FLOPs vs ZiCO")
-
-        ax.legend()
-        plt.tight_layout()
-        plt.savefig(save_path, dpi=200)
-        plt.close(fig)
+ 
     
     def nsga2_evolve(self, pop_size=10, n_gen=2, seed=1, proxy_name="synflow"): #old evolve algorithm is kept for backwards compatibility not removed yet
         self.nsga2_archive = []
