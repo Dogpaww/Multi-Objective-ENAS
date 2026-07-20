@@ -461,6 +461,219 @@ class SOGA(Optimizer):
         plt.close(fig)
 
         print(f"Saved 3D NSGA-II front surface plot to: {save_path}")
+
+    def records_to_objective_matrix(self, records):
+        """
+        Convert evaluated architecture records into the NSGA-II minimization objective matrix.
+
+        Objectives:
+            f1 = -log10(SynFlow)  -> minimize because larger SynFlow is better
+            f2 = FLOPs            -> minimize because smaller FLOPs is better
+            f3 = -ZiCO            -> minimize because larger ZiCO is better
+        """
+        F = []
+
+        for r in records:
+            if (
+                "log_proxy_score" in r
+                and "flops_billion" in r
+                and "zico" in r
+                and np.isfinite(float(r["log_proxy_score"]))
+                and np.isfinite(float(r["flops_billion"]))
+                and np.isfinite(float(r["zico"]))
+            ):
+                F.append([
+                    -float(r["log_proxy_score"]),
+                    float(r["flops_billion"]),
+                    -float(r["zico"])
+                ])
+
+        return np.array(F, dtype=float)
+
+
+    def normalize_objectives(self, F, ideal=None, nadir=None):
+        """
+        Normalize objective values into [0, 1].
+
+        Since all objectives are minimization objectives:
+            0 is best
+            1 is worst
+        """
+        eps = 1e-12
+
+        if ideal is None:
+            ideal = np.min(F, axis=0)
+
+        if nadir is None:
+            nadir = np.max(F, axis=0)
+
+        F_norm = (F - ideal) / (nadir - ideal + eps)
+        F_norm = np.clip(F_norm, 0.0, 1.0)
+
+        return F_norm, ideal, nadir
+
+
+    def get_nondominated_records(self, records):
+        """
+        Extract nondominated records from a list of evaluated architectures.
+        """
+        valid = []
+
+        for r in records:
+            if (
+                "log_proxy_score" in r
+                and "flops_billion" in r
+                and "zico" in r
+                and np.isfinite(float(r["log_proxy_score"]))
+                and np.isfinite(float(r["flops_billion"]))
+                and np.isfinite(float(r["zico"]))
+            ):
+                valid.append(r)
+
+        if len(valid) == 0:
+            return []
+
+        F = self.records_to_objective_matrix(valid)
+        nd_idx = NonDominatedSorting().do(F, only_non_dominated_front=True)
+
+        return [valid[i] for i in nd_idx]
+
+
+    def compute_generational_distance(self, front_norm, reference_norm):
+        """
+        Compute Generational Distance.
+
+        GD measures how close the obtained Pareto front is to a reference Pareto front.
+
+        Lower GD is better.
+        If GD = 0, the obtained front exactly matches the reference front.
+        """
+        if len(front_norm) == 0 or len(reference_norm) == 0:
+            return None
+
+        distances = []
+
+        for p in front_norm:
+            d = np.linalg.norm(reference_norm - p, axis=1)
+            distances.append(np.min(d))
+
+        distances = np.array(distances, dtype=float)
+
+        gd = np.sqrt(np.mean(distances ** 2))
+        return float(gd)
+
+
+    def compute_overall_pareto_spread(self, front_norm):
+        """
+        Compute Overall Pareto Spread.
+
+        This measures how widely the Pareto front covers the objective space.
+
+        Here OS is computed as the average normalized range across objectives:
+
+            OS = mean(max(f_j) - min(f_j))
+
+        Higher OS means better spread/diversity.
+        """
+        if len(front_norm) == 0:
+            return None
+
+        ranges = np.max(front_norm, axis=0) - np.min(front_norm, axis=0)
+        os_value = np.mean(ranges)
+
+        return float(os_value)
+
+
+    def evaluate_pareto_front_metrics(
+        self,
+        pareto_records,
+        all_records=None,
+        reference_records=None,
+        save_path="nsga2_pareto_metrics.json"
+    ):
+        """
+        Evaluate Pareto-front quality using:
+            1. Hypervolume
+            2. Generational Distance
+            3. Overall Pareto Spread
+
+        pareto_records:
+            The obtained nondominated Pareto front.
+
+        all_records:
+            All evaluated architectures. Used to normalize the objectives.
+
+        reference_records:
+            Reference Pareto front for GD. If None, the nondominated front from all_records is used.
+        """
+        import json
+
+        if all_records is None:
+            all_records = pareto_records
+
+        if reference_records is None:
+            reference_records = self.get_nondominated_records(all_records)
+
+        F_all = self.records_to_objective_matrix(all_records)
+        F_pareto = self.records_to_objective_matrix(pareto_records)
+        F_ref = self.records_to_objective_matrix(reference_records)
+
+        if len(F_pareto) == 0:
+            raise RuntimeError("Cannot compute Pareto metrics because the Pareto front is empty.")
+
+        # Normalize using all evaluated architectures so the scale is consistent.
+        _, ideal, nadir = self.normalize_objectives(F_all)
+        F_pareto_norm, _, _ = self.normalize_objectives(F_pareto, ideal=ideal, nadir=nadir)
+        F_ref_norm, _, _ = self.normalize_objectives(F_ref, ideal=ideal, nadir=nadir)
+
+        # Hypervolume: use a reference point worse than all normalized objective values.
+        # Since normalized minimization values are in [0, 1], [1.1, 1.1, 1.1] is safely worse.
+        ref_point = np.ones(F_pareto_norm.shape[1]) * 1.1
+        hv_indicator = HV(ref_point=ref_point)
+        hypervolume = float(hv_indicator(F_pareto_norm))
+
+        # Generational Distance
+        gd = self.compute_generational_distance(F_pareto_norm, F_ref_norm)
+
+        # Overall Pareto Spread
+        os_value = self.compute_overall_pareto_spread(F_pareto_norm)
+
+        metrics = {
+            "hypervolume": hypervolume,
+            "generational_distance": gd,
+            "overall_pareto_spread": os_value,
+            "num_pareto_solutions": int(len(F_pareto_norm)),
+            "num_reference_solutions": int(len(F_ref_norm)),
+            "num_all_valid_solutions": int(len(F_all)),
+            "normalization": {
+                "ideal_min_objective_values": ideal.tolist(),
+                "nadir_max_objective_values": nadir.tolist()
+            },
+            "reference_point_for_hypervolume": ref_point.tolist(),
+            "objective_order": [
+                "-log10(SynFlow)",
+                "FLOPs",
+                "-ZiCO"
+            ],
+            "objective_direction": [
+                "minimize",
+                "minimize",
+                "minimize"
+            ]
+        }
+
+        with open(save_path, "w") as f:
+            json.dump(metrics, f, indent=2)
+
+        print("\n================ Pareto Front Metrics ================")
+        print(f"Hypervolume              : {hypervolume:.6f}  higher is better")
+        print(f"Generational Distance    : {gd:.6f}  lower is better")
+        print(f"Overall Pareto Spread OS : {os_value:.6f}  higher is better")
+        print(f"Pareto solutions         : {len(F_pareto_norm)}")
+        print(f"Saved metrics to         : {save_path}")
+        print("======================================================\n")
+
+        return metrics
     def select_nsga2_architectures(self, records, top_k=2):
         # existing valid-record filtering
         valid = []
