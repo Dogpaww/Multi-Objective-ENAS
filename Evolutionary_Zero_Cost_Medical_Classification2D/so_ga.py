@@ -7,6 +7,9 @@ import random
 import os
 from copy import deepcopy
 
+import gc
+import torch
+
 import numpy as np
 import math
 import random
@@ -674,7 +677,7 @@ class SOGA(Optimizer):
         print("======================================================\n")
 
         return metrics
-    def select_nsga2_architectures(self, records, top_k=2):
+    def select_nsga2_architectures(self, records, top_k=1):
         # existing valid-record filtering
         valid = []
 
@@ -734,7 +737,7 @@ class SOGA(Optimizer):
             "all_valid_architectures": valid,
         }
 
-        with open("nsga2_selected_two_architectures.json", "w") as f:
+        with open("nsga2_selected_architecture.json", "w") as f:
             json.dump(selected, f, indent=2, default=str)
 
         print("\n================ TOPSIS SELECTED ARCHITECTURES ================")
@@ -755,7 +758,7 @@ class SOGA(Optimizer):
             print(f"individual: {r['individual']}")
             print(f"decoded_cell: {r['decoded_cell']}")
 
-        print("\nSaved TOPSIS-selected architectures to: nsga2_selected_two_architectures.json")
+        print("\nSaved TOPSIS-selected architecture to: nsga2_selected_architecture.json")
 
         self.plot_nsga2_fronts(valid=valid, selected=selected_top2, save_path="nsga2_ranked_fronts.png")
 
@@ -841,7 +844,7 @@ class SOGA(Optimizer):
 
         selected = self.select_nsga2_architectures(
             self.nsga2_archive,
-            top_k=2
+            top_k=1
         )
 
         return selected
@@ -1011,6 +1014,11 @@ class SOGA(Optimizer):
 
             print(f"\nBest DA policy for selected architecture #{idx}:")
             print(best_da_policy)
+
+            # Free the DA-search model before creating the final-training model
+            del da_model
+            torch.cuda.empty_cache()
+            gc.collect()
 
             # ------------------------------------------------------------------
             # 3. Rebuild fresh model for final training, do not reuse da_model because da search may have trained/modified it

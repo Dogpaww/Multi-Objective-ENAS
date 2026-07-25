@@ -6,7 +6,7 @@ from acsconv.converters import ACSConverter, Conv2_5dConverter, Conv3dConverter
 from art.estimators.classification import PyTorchClassifier
 from medmnist import INFO
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
-
+import gc
 from dataset import Dataset
 import random
 import numpy as np
@@ -119,9 +119,39 @@ class Evaluate:
         fitness_arc, data_aug_arc = [],[]
         for generation in range(num_generations):
             # Evaluate the fitness of each individual in the population
-            fitness_aug  = [self.fitness_function(candidate, model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, num_epochs, gpu_ids,
-          batch_size,is_final, download, run) for candidate in
-                              population]
+            fitness_aug = []
+
+            for candidate in population:
+                result = self.fitness_function(
+                    candidate,
+                    model,
+                    epochs,
+                    hash_indv,
+                    grad_clip,
+                    evaluation,
+                    data_flag,
+                    output_root,
+                    num_epochs,
+                    gpu_ids,
+                    batch_size,
+                    is_final,
+                    download,
+                    run
+                )
+
+                fitness_aug.append(result)
+
+                # Clean temporary GPU memory after this DA policy trial
+                del result
+                torch.cuda.empty_cache()
+                gc.collect()
+
+                if torch.cuda.is_available():
+                    print(
+                        "[GPU after DA candidate] "
+                        f"allocated={torch.cuda.memory_allocated() / 1024**3:.2f} GB, "
+                        f"reserved={torch.cuda.memory_reserved() / 1024**3:.2f} GB"
+                    )
             # Separate into two lists
             fitness_scores = [item[0] for item in fitness_aug]
             data_augmentations_archive = [item[1] for item in fitness_aug]
@@ -339,7 +369,7 @@ class Evaluate:
         model.train()
         # Training the model
         for batch_idx, (inputs, targets) in enumerate(train_loader):
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             outputs, x = model(inputs.to(device))
 
             if task == 'multi-label, binary-class':
@@ -356,6 +386,7 @@ class Evaluate:
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
+            del inputs, targets, outputs, x, loss
 
         epoch_loss = sum(total_loss) / len(total_loss)
         return epoch_loss

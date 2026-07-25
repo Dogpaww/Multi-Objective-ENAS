@@ -114,25 +114,26 @@ if __name__ == '__main__':
   RUN_NSGA2_SEARCH = True
 
   
+  SMOKE_TEST=False 
 
   # Running the algorithm
   #ga.mealypy_evolve('de',10,2,medmnist_dataset) -> old call
   if RUN_NSGA2_SEARCH:
     selected = ga.nsga2_evolve(
-      pop_size=10,
-      n_gen=2,
+      pop_size=20,
+      n_gen=10,
       seed=1,
       proxy_name="synflow")
 
    #for smoke test pop size=10 n_gen=2,real run =20,10
   # Record the end time
-  RUN_DA_TRAINING = False
+  RUN_DA_TRAINING = True
   if RUN_DA_TRAINING:
     ga.train_selected_nsga2_architectures_with_da(
         selected=selected,
         da_search_epochs=1 if SMOKE_TEST else 100,
         final_train_epochs=1 if SMOKE_TEST else 300,
-        batch_size=32 if SMOKE_TEST else 1000,
+        batch_size=32 if SMOKE_TEST else 64,
         gpu_ids="-1" if SMOKE_TEST else "0",
     )
   

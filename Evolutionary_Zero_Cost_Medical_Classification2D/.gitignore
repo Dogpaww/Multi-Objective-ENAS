@@ -1,0 +1,18 @@
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Training outputs
+output/
+*.pth
+*.pt
+*.ckpt
+events.out.tfevents.*
+
+# Generated NSGA artifacts
+nsga2_ranked_fronts.png
+nsga2_selected_architecture.json
+nsga2_selected_two_architectures.json

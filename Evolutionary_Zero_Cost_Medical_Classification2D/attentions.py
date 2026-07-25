@@ -137,7 +137,8 @@ class BAMMask(nn.Module):
     def forward(self, x) -> Tensor:
         com = self.channel_att(x) * self.spatial_att(x)
 
-        return torch.sigmoid(com) + torch.ones(x.size()).to(device)
+        #return torch.sigmoid(com) + torch.ones(x.size()).to(device) -old code
+        return torch.sigmoid(com) + 1.0
 
 
 class BottleneckAttentionModule(nn.Module):
