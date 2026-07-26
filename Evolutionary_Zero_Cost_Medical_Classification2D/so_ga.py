@@ -63,7 +63,7 @@ def evaluate_arch(self, ind, dataset, measure):
     return random.randint(10,10)
 
 class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is one candidate arch vector,out["f"]=two obj vector 
-    def __init__(self, soga, n_var=48, proxy_name="synflow"):
+    def __init__(self, soga, n_var=48, proxy_name="synflow",input_size=224,zc_batch_size=4):
         super().__init__(
             n_var=n_var,
             n_obj=3,
@@ -73,6 +73,8 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
         )
         self.soga = soga
         self.proxy_name = proxy_name
+        self.input_size = input_size
+        self.zc_batch_size = zc_batch_size
 
     """def _evaluate(self, x, out, *args, **kwargs):
         try:
@@ -108,7 +110,9 @@ class NASNSGA2Problem(ElementwiseProblem): #added NSGA wrapper class to use x is
         try:
             record = self.soga.evaluate_architecture_metrics(
                 x,
-                proxy_name=self.proxy_name
+                proxy_name=self.proxy_name,
+                input_size=self.input_size,
+                zc_batch_size=self.zc_batch_size
             )
 
             proxy_obj = -record["log_proxy_score"]
@@ -142,7 +146,7 @@ class SOGA(Optimizer):
 
     
 
-    def build_model_from_individual(self, individual, is_final=False):
+    def build_model_from_individual(self, individual, is_final=False,input_size=32):
         """
         Rebuild a NetworkCIFAR model from the exact saved NSGA-II individual.
 
@@ -172,7 +176,7 @@ class SOGA(Optimizer):
             self.n_channels,
             n_classes,
             fixed_individual[-1],
-            True,
+            False, #disable unused auxilary head
             decoded_cell,
             self.is_medmnist,
             is_final,
@@ -183,7 +187,7 @@ class SOGA(Optimizer):
 
         return model, decoded_cell, n_classes
 
-    def build_model_from_solution(self, solution):
+    def build_model_from_solution(self, solution,input_size=32):
         info = INFO[self.medmnist_dataset]
         n_classes = len(info['label'])
 
@@ -213,13 +217,14 @@ class SOGA(Optimizer):
             self.n_channels,
             n_classes,
             individual[-1],
-            True,
+            False,
             decoded_cell,
             self.is_medmnist,
             is_final,
             self.dropout_rate,
             'FP32',
-            False
+            False,
+            height_curr=input_size
         )
 
         return individual, decoded_cell, decoded_model, n_classes
@@ -766,14 +771,22 @@ class SOGA(Optimizer):
 
 
 
-    def evaluate_architecture_metrics(self, solution, proxy_name="synflow"):
-        individual, decoded_cell, decoded_model, n_classes = self.build_model_from_solution(solution)
+    def evaluate_architecture_metrics(self, solution, proxy_name="synflow",input_size=224,zc_batch_size=4):
+        individual, decoded_cell, decoded_model, n_classes = self.build_model_from_solution(solution,input_size=input_size)
 
-        measures = self.evaluator.evaluate_zero_cost(
+        """measures = self.evaluator.evaluate_zero_cost(
             decoded_model,
             self.epochs,
             n_classes
-        )
+        )"""
+
+        measures = self.evaluator.evaluate_zero_cost(
+        decoded_model,
+        self.epochs,
+        n_classes,
+        input_size=input_size,
+        zc_batch_size=zc_batch_size
+    )
 
         proxy_score = float(measures[proxy_name])
         flops = float(measures["flops"])
@@ -811,7 +824,7 @@ class SOGA(Optimizer):
     
  
     
-    def nsga2_evolve(self, pop_size=10, n_gen=2, seed=1, proxy_name="synflow"): #old evolve algorithm is kept for backwards compatibility not removed yet
+    def nsga2_evolve(self, pop_size=10, n_gen=2, seed=1, proxy_name="synflow",search_input_size=224,zc_batch_size=4): #old evolve algorithm is kept for backwards compatibility not removed yet
         self.nsga2_archive = []
 
         n_var = 48
@@ -819,7 +832,9 @@ class SOGA(Optimizer):
         problem = NASNSGA2Problem(
             soga=self,
             n_var=n_var,
-            proxy_name=proxy_name
+            proxy_name=proxy_name,
+            input_size=search_input_size,
+            zc_batch_size=zc_batch_size
         )
 
         algorithm = NSGA2(
@@ -896,7 +911,7 @@ class SOGA(Optimizer):
     def evaluate_ensemble_predictions(self,ensemble,medmnist_dataset):
 
         return None
-    def train_final_individual(self,solution,medmnist_dataset):
+    def train_final_individual(self,solution,medmnist_dataset,accumulation_steps=1):
         data_flag = self.medmnist_dataset
         output_root = './output'
         info = INFO[self.medmnist_dataset]
@@ -928,7 +943,7 @@ class SOGA(Optimizer):
         # evaluation = 'test'
         #best_combination = None
         loss = self.evaluator.train(best_combination,decoded_individual, 100, hash_indv=None, grad_clip=5, evaluation='test', data_flag=data_flag, output_root=output_root,
-                                    num_epochs=num_epochs, gpu_ids=gpu_ids, batch_size=batch_size,is_final=False, download=download, run=run)
+                                    num_epochs=num_epochs, gpu_ids=gpu_ids, batch_size=batch_size,is_final=False, download=download, run=run,accumulation_steps=accumulation_steps,use_amp=True)
         print("loss", loss)
 
 
@@ -943,10 +958,14 @@ class SOGA(Optimizer):
         output_root="./output",
         da_search_epochs=100,
         final_train_epochs=300,
-        batch_size=128,
+        da_batch_size=1,
+        final_batch_size=1,
+        search_input_size=64,
+        final_input_size=64,
+        accumulation_steps=1,
         gpu_ids="",
         download=True,
-    ):
+):
         """
         Train and evaluate the two architectures selected from the NSGA-II Pareto front.
 
@@ -1006,10 +1025,13 @@ class SOGA(Optimizer):
                 output_root=output_root,
                 num_epochs=da_search_epochs,
                 gpu_ids=gpu_ids,
-                batch_size=batch_size,
+                batch_size=da_batch_size,
                 is_final=False,
                 download=download,
-                run=run_name + "_da_search"
+                run=run_name + "_da_search",
+                input_size=search_input_size,
+                accumulation_steps=accumulation_steps,
+                use_amp=True
             )
 
             print(f"\nBest DA policy for selected architecture #{idx}:")
@@ -1042,10 +1064,12 @@ class SOGA(Optimizer):
                 output_root=output_root,
                 num_epochs=final_train_epochs,
                 gpu_ids=gpu_ids,
-                batch_size=batch_size,
+                batch_size=da_batch_size,
                 is_final=True, #important so evaluator.train() appllies the chosen da policy
                 download=download,
-                run=run_name + "_final_test"
+                run=run_name + "_final_test",
+                accumulation_steps=accumulation_steps,
+                use_amp=True,
             )
 
             result = {

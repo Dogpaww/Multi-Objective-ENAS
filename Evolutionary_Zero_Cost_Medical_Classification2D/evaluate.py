@@ -45,7 +45,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 
 # Define your data augmentation policies
-data_augmentations = [
+"""data_augmentations = [
     transforms.RandomApply([transforms.RandomHorizontalFlip()]),
     transforms.RandomApply([transforms.RandomVerticalFlip()]),
     transforms.RandomApply([transforms.RandomRotation(30)]),
@@ -53,7 +53,37 @@ data_augmentations = [
     transforms.RandomApply([transforms.RandomResizedCrop(32)]),
     transforms.RandomApply([transforms.RandomAffine(degrees=0, translate=(0.2, 0.2))]),
     transforms.RandomApply([transforms.RandomErasing(p=0.5, scale=(0.02, 0.33), ratio=(0.3, 3.3))])
-]
+]"""
+def get_data_augmentations(input_size):
+    return [
+        transforms.RandomApply([transforms.RandomHorizontalFlip()]),
+        transforms.RandomApply([transforms.RandomVerticalFlip()]),
+        transforms.RandomApply([transforms.RandomRotation(30)]),
+        transforms.RandomApply([
+            transforms.ColorJitter(
+                brightness=0.2,
+                contrast=0.2,
+                saturation=0.2,
+                hue=0.2
+            )
+        ]),
+        transforms.Compose([
+    transforms.RandomApply([
+        transforms.RandomResizedCrop((input_size, input_size))
+    ]),
+    transforms.Resize((input_size, input_size))
+]),
+        transforms.RandomApply([
+            transforms.RandomAffine(degrees=0, translate=(0.2, 0.2))
+        ]),
+        transforms.RandomApply([
+            transforms.RandomErasing(
+                p=0.5,
+                scale=(0.02, 0.33),
+                ratio=(0.3, 3.3)
+            )
+        ])
+    ]
 
 # Define the number of augmentations to select
 num_to_select = 2
@@ -113,9 +143,13 @@ class Evaluate:
 
     # Genetic Algorithm
     def genetic_algorithm(self,model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, num_epochs, gpu_ids,
-          batch_size,is_final, download, run):
+          batch_size,is_final, download, run,input_size=32, accumulation_steps=1, use_amp=True):
         # Generate an initial population
-        population = [random.sample(data_augmentations, num_to_select) for _ in range(population_size)]
+        #population = [random.sample(data_augmentations, num_to_select) for _ in range(population_size)]
+
+        aug_pool = get_data_augmentations(input_size)
+        population = [random.sample(aug_pool, num_to_select) for _ in range(population_size)]
+
         fitness_arc, data_aug_arc = [],[]
         for generation in range(num_generations):
             # Evaluate the fitness of each individual in the population
@@ -175,7 +209,7 @@ class Evaluate:
                 mutation_point = random.randint(0, num_to_select - 1)
 
                 # Avoid choosing the same policy that already exists in the individual
-                available_policies = list(set(data_augmentations) - set(selected_population[index_to_mutate]))
+                available_policies = list(set(aug_pool) - set(selected_population[index_to_mutate]))
                 mutated_individual = selected_population[index_to_mutate].copy()
                 mutated_individual[mutation_point] = random.choice(available_policies)
                 mutated_population.append(mutated_individual)
@@ -194,13 +228,13 @@ class Evaluate:
         return best_individual
 
     def auto_search_daapolicy(self, model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, num_epochs, gpu_ids,
-          batch_size,is_final, download, run):       # Example usage
+          batch_size,is_final, download, run,input_size=32, accumulation_steps=1, use_amp=True):       # Example usage
         best_combination = self.genetic_algorithm(model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, num_epochs, gpu_ids,
-          batch_size,is_final, download, run)
+                batch_size,is_final, download, run,input_size=input_size,accumulation_steps=accumulation_steps,use_amp=use_amp)
         print("Best Data Augmentation Combination:", best_combination)
         return best_combination
 
-    def evaluate_zero_cost(self,model,epochs,n_classes,warmup=False):
+    def evaluate_zero_cost(self,model,epochs,n_classes,warmup=False,input_size=32,zc_batch_size=32):
         num_epochs = 10
         as_rgb = True
         resize = False
@@ -240,7 +274,7 @@ class Evaluate:
                 # transforms.RandomVerticalFlip(),
                 # transforms.RandomRotation(15),
                 # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-                transforms.RandomResizedCrop(size=32, scale=(0.8, 1.0)),
+                transforms.RandomResizedCrop(size=input_size, scale=(0.8, 1.0)), #changed size=32
                 # transforms.RandomApply([transforms.GaussianBlur(kernel_size=5)], p=0.2),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5], std=[0.5])  # Modify normalization based on your dataset
@@ -250,7 +284,7 @@ class Evaluate:
             #     [transforms.ToTensor(),
             #      transforms.Normalize(mean=[.5], std=[.5])])
             download =True
-            batch_size = 32
+            batch_size = input_size #changed batch size from 32
             train_dataset = DataClass(split='train', transform=data_transform, download=download, as_rgb=as_rgb)
             val_dataset = DataClass(split='val', transform=data_transform, download=download, as_rgb=as_rgb)
             test_dataset = DataClass(split='test', transform=data_transform, download=download, as_rgb=as_rgb)
@@ -297,9 +331,9 @@ class Evaluate:
 
         #Computing FLOPS and Parameters of model
         if self.is_medmnist == True:
-            input_tensor = torch.randn(4, 3, 32, 32)  # Replace with your input size
+            input_tensor = torch.randn(4, 3, input_size, input_size)  # Replace with your input size
         else:
-            input_tensor = torch.randn(4, 3, 256, 256)  # Replace with your input size
+            input_tensor = torch.randn(4, 3, input_size, input_size)  # Replace with your input size
 
 
         #input_tensor = input_tensor.cuda() - works only for cuda
@@ -360,38 +394,79 @@ class Evaluate:
 
         return measures
 
-        # Training
-
-    def __train(self, model, train_loader, task, criterion, optimizer, device, writer):
+            # Training
+    def __train(
+        self,
+        model,
+        train_loader,
+        task,
+        criterion,
+        optimizer,
+        device,
+        writer,
+        scaler=None,
+        accumulation_steps=1,
+        use_amp=True
+    ):
         total_loss = []
         global iteration
         grad_clip = 5
+
         model.train()
-        # Training the model
+        optimizer.zero_grad(set_to_none=True)
+
         for batch_idx, (inputs, targets) in enumerate(train_loader):
-            optimizer.zero_grad(set_to_none=True)
-            outputs, x = model(inputs.to(device))
+            inputs = inputs.to(device, non_blocking=True)
 
             if task == 'multi-label, binary-class':
-                targets = targets.to(torch.float32).to(device)
-                loss = criterion(outputs, targets)
+                targets = targets.to(torch.float32).to(device, non_blocking=True)
             else:
-                targets = torch.squeeze(targets, 1).long().to(device)
-                loss = criterion(outputs, targets)
+                targets = torch.squeeze(targets, 1).long().to(device, non_blocking=True)
 
-            total_loss.append(loss.item())
-            writer.add_scalar('train_loss_logs', loss.item(), iteration)
+            with torch.cuda.amp.autocast(enabled=(use_amp and torch.cuda.is_available() and device.type== "cuda")):
+                outputs, logits_aux = model(inputs)
+                loss = criterion(outputs, targets)
+                loss = loss / accumulation_steps
+
+            if scaler is not None:
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
+
+            if (batch_idx + 1) % accumulation_steps == 0:
+                if scaler is not None:
+                    scaler.unscale_(optimizer)
+                    nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                    optimizer.step()
+
+                optimizer.zero_grad(set_to_none=True)
+
+            total_loss.append(loss.item() * accumulation_steps)
+            writer.add_scalar('train_loss_logs', loss.item() * accumulation_steps, iteration)
             iteration += 1
 
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            optimizer.step()
-            del inputs, targets, outputs, x, loss
+            del inputs, targets, outputs, logits_aux, loss
+
+        # Handle leftover batches if len(train_loader) is not divisible by accumulation_steps
+        if len(train_loader) % accumulation_steps != 0:
+            if scaler is not None:
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                optimizer.step()
+
+            optimizer.zero_grad(set_to_none=True)
 
         epoch_loss = sum(total_loss) / len(total_loss)
         return epoch_loss
-
-    # Function to apply TTA on a single image
+    
     def apply_tta(self,image):
         tta_transform = transforms.Compose([
             #Add other transformations as needed
@@ -407,12 +482,14 @@ class Evaluate:
         augmented_image = tta_transform(image)
         return augmented_image
     def __test(self, model, evaluator, data_loader, task, criterion, device, run, type_task, save_folder=None):
-        # Testing the model
         check_evaluator = medmnist.Evaluator(self.medmnist_dataset, type_task)
+
         info = INFO[self.medmnist_dataset]
         task = info["task"]
+
         root = DEFAULT_ROOT
-        npz_file = np.load(os.path.join(root, "{}.npz".format((self.medmnist_dataset))))
+        npz_file = np.load(os.path.join(root, "{}.npz".format(self.medmnist_dataset)))
+
         if type_task == 'train':
             self.labels = npz_file['train_labels']
         elif type_task == 'val':
@@ -425,44 +502,37 @@ class Evaluate:
         model.eval()
 
         total_loss = []
-        y_score = torch.tensor([]).to(device)
+        y_score = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for batch_idx, (inputs, targets) in enumerate(data_loader):
-                # if type_task == 'test':
-                #     # Apply TTA to each input image in the batch
-                #     augmented_inputs = [self.apply_tta(input) for input in inputs]
-                #
-                #     # Convert augmented inputs to PyTorch tensor
-                #     augmented_inputs = torch.stack(augmented_inputs).to(device)
-                #
-                #     # Get model predictions for augmented inputs
-                #     outputs, x = model(augmented_inputs)
-                # else:
-                outputs, x = model(inputs.to(device))
+                inputs = inputs.to(device, non_blocking=True)
+                outputs, logits_aux = model(inputs)
 
                 if task == 'multi-label, binary-class':
-                    targets = targets.to(torch.float32).to(device)
+                    targets = targets.to(torch.float32).to(device, non_blocking=True)
                     loss = criterion(outputs, targets)
-                    m = nn.Sigmoid()
-                    outputs = m(outputs).to(device)
+                    outputs = torch.sigmoid(outputs)
                 else:
-                    targets = torch.squeeze(targets, 1).long().to(device)
+                    targets = torch.squeeze(targets, 1).long().to(device, non_blocking=True)
                     loss = criterion(outputs, targets)
-                    m = nn.Softmax(dim=1)
-                    outputs = m(outputs).to(device)
-                    targets = targets.float().resize_(len(targets), 1)
+                    outputs = torch.softmax(outputs, dim=1)
 
                 total_loss.append(loss.item())
-                y_score = torch.cat((y_score, outputs), 0)
 
-            y_score = y_score.detach().cpu().numpy()
-            auc, acc = evaluator.evaluate(y_score, save_folder, run)
-            f1 = evaluate_measures(self.labels, y_score, task)
-            test_loss = sum(total_loss) / len(total_loss)
+                # Store predictions on CPU, not GPU
+                y_score.append(outputs.detach().cpu())
 
-            return [test_loss, auc, acc, f1]
+                del inputs, targets, outputs, logits_aux, loss
 
+        y_score = torch.cat(y_score, dim=0).numpy()
+
+        auc, acc = evaluator.evaluate(y_score, save_folder, run)
+        f1 = evaluate_measures(self.labels, y_score, task)
+        test_loss = sum(total_loss) / len(total_loss)
+
+        return [test_loss, auc, acc, f1]
+    
     def train_ensemble(self, augmented_topology, models, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root,
               num_epochs, gpu_ids,
               batch_size, is_final, download, run):
@@ -584,7 +654,18 @@ class Evaluate:
             iteration = 0
             # Training the models till the given epochs
             for epoch in trange(num_epochs):
-                train_loss = self.__train(model, train_loader, task, criterion, optimizer, device, writer)
+                train_loss = self.__train(
+                    model,
+                    train_loader,
+                    task,
+                    criterion,
+                    optimizer,
+                    device,
+                    writer,
+                    scaler=scaler,
+                    accumulation_steps=accumulation_steps,
+                    use_amp=use_amp
+                )
 
                 train_metrics = self.__test(model, train_evaluator, train_loader_at_eval, task, criterion, device, run,
                                             'train')
@@ -655,7 +736,11 @@ class Evaluate:
         else:
             return test_metrics[1] + test_metrics[2]
     def train(self, augmented_topology,model, epochs, hash_indv, grad_clip, evaluation, data_flag, output_root, num_epochs, gpu_ids,
-          batch_size,is_final, download, run):
+          batch_size,is_final, download, run,input_size=None,accumulation_steps=1,use_amp=True):
+
+        if input_size is None:
+            input_size = 224 if is_final else 32
+
         # Setting the parameters
         as_rgb = True
         resize = False
@@ -687,34 +772,33 @@ class Evaluate:
             os.makedirs(output_root)
 
         print('==> Preparing data...')
-        if is_final == True:
-            data_transform = transforms.Compose(
-                [transforms.ToTensor(),
-                 transforms.Resize(size=(224, 224), antialias=False),
-                 transforms.Normalize(mean=[.5], std=[.5])])
-        else:
-            data_transform = transforms.Compose(
-                [transforms.ToTensor(),
-                 transforms.Resize(size=(32, 32), antialias=False),
-                 transforms.Normalize(mean=[.5], std=[.5])])
+
+        base_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(size=(input_size, input_size), antialias=False),
+            transforms.Normalize(mean=[.5], std=[.5])
+        ])
+
         if evaluation == 'valid':
-            data_transform = transforms.Compose([
-                data_transform,
+            train_transform = transforms.Compose([
+                base_transform,
                 augmented_topology.transforms[0],
                 augmented_topology.transforms[1]
             ])
+        elif is_final:
+            train_transform = transforms.Compose([
+                base_transform,
+                augmented_topology[0],
+                augmented_topology[1]
+            ])
         else:
-            if is_final == False:
-                pass
-            else:
-                data_transform = transforms.Compose([
-                    data_transform,
-                    augmented_topology[0],
-                    augmented_topology[1]
-                ])
-        train_dataset = DataClass(split='train', transform=data_transform, download=download, as_rgb=as_rgb)
-        val_dataset = DataClass(split='val', transform=data_transform, download=download, as_rgb=as_rgb)
-        test_dataset = DataClass(split='test', transform=data_transform, download=download, as_rgb=as_rgb)
+            train_transform = base_transform
+
+        eval_transform = base_transform        
+        train_dataset = DataClass(split='train', transform=train_transform, download=download, as_rgb=as_rgb)
+        val_dataset = DataClass(split='val', transform=eval_transform, download=download, as_rgb=as_rgb)
+        test_dataset = DataClass(split='test', transform=eval_transform, download=download, as_rgb=as_rgb)
+
 
         train_loader = data.DataLoader(dataset=train_dataset,
                                        batch_size=batch_size,
@@ -770,8 +854,19 @@ class Evaluate:
         best_epoch = 0
         best_model = model
 
+        #global iteration
+        #iteration = 0
+
         global iteration
         iteration = 0
+
+        use_cuda_amp = (
+            use_amp
+            and torch.cuda.is_available()
+            and device.type == "cuda"
+        )
+
+        scaler = torch.cuda.amp.GradScaler(enabled=use_cuda_amp)
         # Training the models till the given epochs
         for epoch in trange(num_epochs):
             train_loss = self.__train(model, train_loader, task, criterion, optimizer, device, writer)
