@@ -182,7 +182,8 @@ class SOGA(Optimizer):
             is_final,
             self.dropout_rate,
             "FP32",
-            False
+            False,
+            height_curr=input_size
         )
 
         return model, decoded_cell, n_classes
@@ -943,7 +944,7 @@ class SOGA(Optimizer):
         # evaluation = 'test'
         #best_combination = None
         loss = self.evaluator.train(best_combination,decoded_individual, 100, hash_indv=None, grad_clip=5, evaluation='test', data_flag=data_flag, output_root=output_root,
-                                    num_epochs=num_epochs, gpu_ids=gpu_ids, batch_size=batch_size,is_final=False, download=download, run=run,accumulation_steps=accumulation_steps,use_amp=True)
+                                    num_epochs=num_epochs, gpu_ids=gpu_ids, batch_size=batch_size,is_final=False, download=download, run=run,accumulation_steps=1,use_amp=True)
         print("loss", loss)
 
 
@@ -1030,7 +1031,7 @@ class SOGA(Optimizer):
                 download=download,
                 run=run_name + "_da_search",
                 input_size=search_input_size,
-                accumulation_steps=accumulation_steps,
+                accumulation_steps=1,
                 use_amp=True
             )
 
@@ -1064,10 +1065,11 @@ class SOGA(Optimizer):
                 output_root=output_root,
                 num_epochs=final_train_epochs,
                 gpu_ids=gpu_ids,
-                batch_size=da_batch_size,
+                batch_size=final_batch_size,
                 is_final=True, #important so evaluator.train() appllies the chosen da policy
                 download=download,
                 run=run_name + "_final_test",
+                input_size=final_input_size,
                 accumulation_steps=accumulation_steps,
                 use_amp=True,
             )

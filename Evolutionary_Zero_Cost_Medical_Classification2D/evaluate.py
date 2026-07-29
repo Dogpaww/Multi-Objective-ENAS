@@ -41,6 +41,8 @@ from torchsummary import summary
 from torchvision import datasets
 from tqdm import trange
 
+import copy
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 
@@ -149,34 +151,45 @@ class Evaluate:
 
         aug_pool = get_data_augmentations(input_size)
         population = [random.sample(aug_pool, num_to_select) for _ in range(population_size)]
-
+        base_state = {
+            k: v.detach().cpu().clone()
+            for k, v in model.state_dict().items()
+            if not (k.endswith("total_ops") or k.endswith("total_params"))
+        }
         fitness_arc, data_aug_arc = [],[]
         for generation in range(num_generations):
             # Evaluate the fitness of each individual in the population
             fitness_aug = []
 
             for candidate in population:
-                result = self.fitness_function(
-                    candidate,
-                    model,
-                    epochs,
-                    hash_indv,
-                    grad_clip,
-                    evaluation,
-                    data_flag,
-                    output_root,
-                    num_epochs,
-                    gpu_ids,
-                    batch_size,
-                    is_final,
-                    download,
-                    run
-                )
+                candidate_model = copy.deepcopy(model).cpu()
+                candidate_model.load_state_dict(base_state, strict=False)
+                try:
+                    result = self.fitness_function(
+                        candidate,
+                        model,
+                        epochs,
+                        hash_indv,
+                        grad_clip,
+                        evaluation,
+                        data_flag,
+                        output_root,
+                        num_epochs,
+                        gpu_ids,
+                        batch_size,
+                        is_final,
+                        download,
+                        run
+                    )
+                except Exception as e:
+                    print("DA candidate failed:",e)
+                    result=(float("-inf"),candidate)
 
                 fitness_aug.append(result)
 
                 # Clean temporary GPU memory after this DA policy trial
                 del result
+                del candidate_model
                 torch.cuda.empty_cache()
                 gc.collect()
 
@@ -284,7 +297,7 @@ class Evaluate:
             #     [transforms.ToTensor(),
             #      transforms.Normalize(mean=[.5], std=[.5])])
             download =True
-            batch_size = input_size #changed batch size from 32
+            batch_size = zc_batch_size #changed batch size from 32
             train_dataset = DataClass(split='train', transform=data_transform, download=download, as_rgb=as_rgb)
             val_dataset = DataClass(split='val', transform=data_transform, download=download, as_rgb=as_rgb)
             test_dataset = DataClass(split='test', transform=data_transform, download=download, as_rgb=as_rgb)
@@ -317,7 +330,7 @@ class Evaluate:
                                             (dataload, 1, n_classes),
                                             self.device,
                                             loss_fn = criterion,
-                                            measure_names={'grad_norm','snip','synflow','plain','zico'}
+                                            measure_names={'synflow','zico'}
                                             )
         else:
             measures = predictive.find_measures(model,self.medmnist_dataset,
@@ -325,7 +338,7 @@ class Evaluate:
                                             (dataload, 1, n_classes),
                                             self.device,
                                             loss_fn = criterion,
-                                            measure_names={'grad_norm','snip','synflow','plain','zico'}
+                                            measure_names={'synflow','zico'}
                                             )
         #print(measures)
 
@@ -540,7 +553,7 @@ class Evaluate:
         as_rgb = True
         resize = False
         # lr = 0.001 # This is from the medmnist authors
-        lr = 0.025  # This is from best reported score paper
+        lr = 0.005  # This is from best reported score paper
         gamma = 0.1
         milestones = [0.5 * num_epochs, 0.75 * num_epochs]
 
@@ -740,6 +753,14 @@ class Evaluate:
 
         if input_size is None:
             input_size = 224 if is_final else 32
+            print(
+                f"[TRAIN CONFIG] run={run}, "
+                f"is_final={is_final}, "
+                f"input_size={input_size}, "
+                f"batch_size={batch_size}, "
+                f"accumulation_steps={accumulation_steps}, "
+                f"use_amp={use_amp}"
+            )
 
         # Setting the parameters
         as_rgb = True
@@ -869,7 +890,7 @@ class Evaluate:
         scaler = torch.cuda.amp.GradScaler(enabled=use_cuda_amp)
         # Training the models till the given epochs
         for epoch in trange(num_epochs):
-            train_loss = self.__train(model, train_loader, task, criterion, optimizer, device, writer)
+            train_loss = self.__train(model, train_loader, task, criterion, optimizer, device, writer,scaler=scaler,accumulation_steps=accumulation_steps,use_amp=use_cuda_amp)
 
             train_metrics = self.__test(model, train_evaluator, train_loader_at_eval, task, criterion, device, run,
                                         'train')
